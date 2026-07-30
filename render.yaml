@@ -1,0 +1,27 @@
+databases:
+  - name: financetrack-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: financetrack-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: financetrack-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CLIENT_ORIGIN
+        value: https://financetrack-lemon.vercel.app

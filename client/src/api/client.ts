@@ -1,8 +1,12 @@
 import axios, { AxiosError } from "axios";
 import type { ApiErrorBody } from "@/types";
 
+// V deve ide /api cez Vite proxy na localhost:4000 (rovnaký origin).
+// V produkcii beží frontend a backend na rôznych doménach, preto absolútna URL z env premennej.
+const baseURL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : "/api";
+
 export const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL,
   withCredentials: true,
 });
 
