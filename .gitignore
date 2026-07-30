@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# env
+.env
+.env.local
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# prisma
+server/prisma/dev.db*
+
+# logs
+npm-debug.log*
+*.log
+
+# editor / os
+.vscode/
+.DS_Store
+
+# vite
+client/.vite/
