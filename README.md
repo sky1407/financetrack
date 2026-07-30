@@ -2,7 +2,7 @@
 
 Full-stack personal finance tracker — accounts, categories, transactions, monthly budgets and a dashboard with charts. Built as a modern, fully typed full-stack project (React + Express + PostgreSQL) to demonstrate practical web application development skills.
 
-**Live demo:** https://financetrack-lemon.vercel.app (demo login: `demo@financetrack.app` / `demo1234`)
+**Live demo:** https://financetrack-lemon.vercel.app/login?demo=1 (signs you in instantly as a demo user, no registration needed — or register your own account)
 
 ## Tech stack
 
