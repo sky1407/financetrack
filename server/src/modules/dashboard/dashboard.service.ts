@@ -34,7 +34,7 @@ export async function getDashboardSummary(userId: string, query: DashboardQuery)
     }),
   ]);
 
-  // Celkovy zostatok = pociatocne zostatky uctov + vsetky ich transakcie (nie len tento mesiac).
+  // Total balance = accounts' initial balances + all of their transactions (not just this month's).
   const allTimeGrouped = await prisma.transaction.groupBy({
     by: ["type"],
     where: { userId },

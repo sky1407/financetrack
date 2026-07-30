@@ -1,6 +1,6 @@
 /**
- * Zdieľané typy zodpovedajúce JSON tvaru, ktorý vracia backend.
- * Peňažné hodnoty (Prisma Decimal) prichádzajú v JSON ako reťazce.
+ * Shared types matching the JSON shape returned by the backend.
+ * Monetary values (Prisma Decimal) arrive in JSON as strings.
  */
 
 export type AccountType = "CASH" | "BANK" | "CARD" | "SAVINGS" | "OTHER";

@@ -3,7 +3,7 @@ import { prisma } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
 import type { CreateAccountInput, UpdateAccountInput } from "./accounts.schema.js";
 
-/** Aktuálny zostatok = počiatočný zostatok + príjmy - výdavky na danom účte. */
+/** Current balance = initial balance + income - expenses on that account. */
 async function computeBalances(userId: string, accountIds: string[]): Promise<Map<string, Prisma.Decimal>> {
   if (accountIds.length === 0) return new Map();
 
@@ -43,7 +43,7 @@ async function findOwnedAccount(userId: string, accountId: string) {
 
 export async function createAccount(userId: string, input: CreateAccountInput) {
   const account = await prisma.account.create({ data: { ...input, userId } });
-  // Čerstvo vytvorený účet ešte nemá žiadne transakcie, zostatok = počiatočný vklad.
+  // A freshly created account has no transactions yet, so balance = initial deposit.
   return { ...account, currentBalance: account.initialBalance };
 }
 

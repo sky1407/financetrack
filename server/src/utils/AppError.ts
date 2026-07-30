@@ -1,6 +1,6 @@
 /**
- * Očakávaná (operačná) chyba, ktorú vieme bezpečne poslať klientovi.
- * Neočakávané chyby (bugy) sa v errorHandleri logujú a klient dostane len 500.
+ * An expected (operational) error that is safe to send to the client.
+ * Unexpected errors (bugs) are logged in the error handler and the client just gets a 500.
  */
 export class AppError extends Error {
   readonly statusCode: number;

@@ -7,13 +7,13 @@ import { TOKEN_COOKIE } from "../../middleware/auth.js";
 import { loginSchema, registerSchema } from "./auth.schema.js";
 import { getUserById, loginUser, registerUser } from "./auth.service.js";
 
-// V produkcii môžu byť frontend a backend na rôznych doménach (napr. Vercel + Render),
-// preto "none" + secure; v deve ide dopyt cez Vite proxy ako same-origin, tam stačí "lax".
+// In production the frontend and backend can live on different domains (e.g. Vercel + Render),
+// hence "none" + secure; in dev the request goes through the Vite proxy as same-origin, so "lax" is enough.
 const crossSiteCookieOptions: Pick<CookieOptions, "secure" | "sameSite"> = isProduction
   ? { secure: true, sameSite: "none" }
   : { secure: false, sameSite: "lax" };
 
-// Odvodené z JWT_EXPIRES_IN, aby cookie a token vždy expirovali súčasne.
+// Derived from JWT_EXPIRES_IN so the cookie and the token always expire at the same time.
 const cookieOptions: CookieOptions = {
   httpOnly: true,
   ...crossSiteCookieOptions,

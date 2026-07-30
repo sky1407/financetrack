@@ -21,7 +21,7 @@ export function createApp(): Express {
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
-  // Prísnejší limit na auth endpointy, aby sme sťažili brute-force útoky na heslá.
+  // Stricter limit on auth endpoints to make password brute-forcing harder.
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 20,

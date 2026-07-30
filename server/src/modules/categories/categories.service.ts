@@ -27,6 +27,6 @@ export async function deleteCategory(userId: string, categoryId: string) {
   if (usageCount > 0) {
     throw AppError.conflict("Kategória sa nedá zmazať, pretože sa používa v transakciách.");
   }
-  // Budget.category má onDelete: Cascade, takže súvisiace rozpočty sa zmažú automaticky.
+  // Budget.category has onDelete: Cascade, so related budgets are deleted automatically.
   await prisma.category.delete({ where: { id: categoryId } });
 }

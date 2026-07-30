@@ -44,7 +44,7 @@ async function assertOwnedCategory(userId: string, categoryId: string): Promise<
   }
 }
 
-/** Súčet výdavkov v danej kategórii za daný mesiac (na dopočítanie spent/remaining/percentage). */
+/** Sum of expenses in the given category for the given month (used to compute spent/remaining/percentage). */
 async function computeSpent(userId: string, categoryId: string, month: number, year: number): Promise<Prisma.Decimal> {
   const { start, end } = monthRange(year, month);
   const result = await prisma.transaction.aggregate({

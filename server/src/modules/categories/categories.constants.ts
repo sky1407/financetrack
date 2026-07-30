@@ -1,6 +1,6 @@
 import { CategoryType } from "@prisma/client";
 
-/** Predvolené kategórie, ktoré dostane každý nový používateľ pri registrácii. */
+/** Default categories every new user gets upon registration. */
 export const DEFAULT_CATEGORIES: Array<{ name: string; type: CategoryType; color: string; icon: string }> = [
   { name: "Bývanie", type: CategoryType.EXPENSE, color: "#f97316", icon: "home" },
   { name: "Jedlo", type: CategoryType.EXPENSE, color: "#22c55e", icon: "utensils" },

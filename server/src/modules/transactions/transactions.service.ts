@@ -3,7 +3,7 @@ import { prisma } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
 import type { CreateTransactionInput, ListTransactionsQuery, UpdateTransactionInput } from "./transactions.schema.js";
 
-/** Overí, že účet aj kategória patria danému používateľovi a typy sú konzistentné. */
+/** Verifies that both the account and category belong to the given user and the types are consistent. */
 async function assertValidReferences(
   userId: string,
   accountId: string,

@@ -35,7 +35,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     }
   }
 
-  console.error("Neočakávaná chyba:", err);
+  console.error("Unexpected error:", err);
   res.status(500).json({
     error: "Nastala neočakávaná chyba na serveri.",
     ...(isProduction ? {} : { detail: err instanceof Error ? err.message : String(err) }),

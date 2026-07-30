@@ -4,7 +4,7 @@ import { verifyToken } from "../utils/jwt.js";
 
 const TOKEN_COOKIE = "token";
 
-/** Vyžaduje platný JWT (z cookie alebo Authorization headera) a naplní `req.user`. */
+/** Requires a valid JWT (from a cookie or the Authorization header) and populates `req.user`. */
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const cookieToken = req.cookies?.[TOKEN_COOKIE] as string | undefined;
   const authHeader = req.headers.authorization;

@@ -2,9 +2,9 @@ import { PrismaClient } from "@prisma/client";
 import { env } from "./env.js";
 
 /**
- * Jeden zdieľaný PrismaClient pre celú aplikáciu. V dev móde ho ukladáme
- * na `globalThis`, aby `tsx watch` pri hot-reloade nevytváral nové
- * pripojenia pri každej zmene súboru.
+ * A single shared PrismaClient for the whole app. In dev mode we stash it
+ * on `globalThis` so that `tsx watch` doesn't open a new connection on
+ * every hot-reload.
  */
 declare global {
   // eslint-disable-next-line no-var

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Absolútna URL backend API v produkcii (napr. https://financetrack-api.onrender.com). Prázdne v deve, kde sa použije Vite proxy. */
+  /** Absolute backend API URL in production (e.g. https://financetrack-api.onrender.com). Empty in dev, where the Vite proxy is used instead. */
   readonly VITE_API_URL?: string;
 }
 

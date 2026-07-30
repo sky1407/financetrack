@@ -1,6 +1,6 @@
 /**
- * Naplni databazu demo uctom, kategoriami, uctami, transakciami za poslednych
- * 5 mesiacov a rozpoctami pre aktualny mesiac. Spustenie: `npm run seed`.
+ * Seeds the database with a demo user, categories, accounts, transactions
+ * for the last 5 months, and budgets for the current month. Run: `npm run seed`.
  */
 import { PrismaClient, AccountType, CategoryType, TransactionType } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -28,7 +28,7 @@ const INCOME_CATEGORIES = [
   { name: "Ostatné príjmy", color: "#64748b", icon: "tag" },
 ];
 
-/** Jednoduchý deterministický PRNG (mulberry32), aby seed dával rovnaké dáta na každom stroji. */
+/** Simple deterministic PRNG (mulberry32) so the seed produces the same data on every machine. */
 function createRng(seed: number) {
   let a = seed;
   return () => {
@@ -80,7 +80,7 @@ async function main() {
   const salaryCategory = incomeCategories[0]!;
   const now = new Date();
 
-  // Mzda k 1. dňu za poslednych 5 mesiacov
+  // Salary on the 1st of each of the last 5 months
   for (let m = 4; m >= 0; m--) {
     const date = new Date(now.getFullYear(), now.getMonth() - m, 1, 9, 0, 0);
     await prisma.transaction.create({
@@ -96,7 +96,7 @@ async function main() {
     });
   }
 
-  // Občasný freelance príjem
+  // Occasional freelance income
   for (let m = 4; m >= 0; m--) {
     if (rng() > 0.5) continue;
     const date = new Date(now.getFullYear(), now.getMonth() - m, 3 + Math.floor(rng() * 20));
@@ -176,13 +176,13 @@ async function main() {
     )
   );
 
-  console.log("Seed hotový.");
-  console.log(`Demo prihlásenie -> email: ${DEMO_EMAIL}, heslo: ${DEMO_PASSWORD}`);
+  console.log("Seed complete.");
+  console.log(`Demo login -> email: ${DEMO_EMAIL}, password: ${DEMO_PASSWORD}`);
 }
 
 main()
   .catch((error) => {
-    console.error("Seed zlyhal:", error);
+    console.error("Seed failed:", error);
     process.exitCode = 1;
   })
   .finally(async () => {

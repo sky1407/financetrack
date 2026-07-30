@@ -3,8 +3,8 @@ import type { ZodTypeAny, z } from "zod";
 import { AppError } from "../utils/AppError.js";
 
 /**
- * Zvaliduje query parametre podľa zod schémy a uloží spracované (typované)
- * dáta do `res.locals.query`, keďže `req.query` v Express type je read-only tvar.
+ * Validates query parameters against a zod schema and stores the parsed
+ * (typed) data in `res.locals.query`, since Express's `req.query` type is read-only.
  */
 export function validateQuery<Schema extends ZodTypeAny>(schema: Schema) {
   return (req: Request, res: Response, next: NextFunction): void => {
