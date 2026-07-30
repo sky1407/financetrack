@@ -1,122 +1,127 @@
 # FinanceTrack
 
-Full-stack appka na sledovanie osobných financií — účty, kategórie, transakcie, mesačné rozpočty a dashboard s grafmi. Postavená ako moderný, typovaný full-stack projekt (React + Express + PostgreSQL) na demonštráciu praktických skúseností s vývojom webových aplikácií.
+Full-stack personal finance tracker — accounts, categories, transactions, monthly budgets and a dashboard with charts. Built as a modern, fully typed full-stack project (React + Express + PostgreSQL) to demonstrate practical web application development skills.
+
+**Live demo:** https://financetrack-lemon.vercel.app (demo login: `demo@financetrack.app` / `demo1234`)
 
 ## Tech stack
 
-- **Backend:** Node.js + Express, TypeScript (`strict` mód), [Prisma ORM](https://www.prisma.io/) nad **PostgreSQL**, JWT autentifikácia (httpOnly cookie) + bcrypt hashovanie hesiel, validácia vstupov cez [Zod](https://zod.dev/), rate limiting na auth endpointoch.
-- **Frontend:** React + Vite + TypeScript, [Tailwind CSS](https://tailwindcss.com/), [TanStack Query](https://tanstack.com/query) na správu dát zo servera, `react-hook-form` + Zod na validáciu formulárov, [Recharts](https://recharts.org/) na grafy.
-- **Databáza:** PostgreSQL 16, pripravená cez Docker Compose — žiadna manuálna inštalácia DB na stroj.
+- **Backend:** Node.js + Express, TypeScript (`strict` mode), [Prisma ORM](https://www.prisma.io/) on top of **PostgreSQL**, JWT authentication (httpOnly cookie) + bcrypt password hashing, input validation via [Zod](https://zod.dev/), rate limiting on auth endpoints.
+- **Frontend:** React + Vite + TypeScript, [Tailwind CSS](https://tailwindcss.com/), [TanStack Query](https://tanstack.com/query) for server-state management, `react-hook-form` + Zod for form validation, [Recharts](https://recharts.org/) for charts.
+- **Database:** PostgreSQL 16, spun up via Docker Compose — no manual DB install needed on your machine.
+- **Deployment:** frontend on Vercel, backend + PostgreSQL on Render (see `render.yaml` / `client/vercel.json`).
 
-## Prečo tento stack
+## Why this stack
 
-Projekt vedome používa **skutočnú relačnú databázu (PostgreSQL) a ORM s migráciami** namiesto zero-config riešenia (SQLite), aby demonštroval prácu s produkčne bežným databázovým setupom — schéma, migrácie, indexy, transakcie, cudzie kľúče. TypeScript naprieč celým stackom (backend aj frontend) dáva prísne typovanie a zdieľateľný tvar dát medzi API a UI.
+The project deliberately uses a **real relational database (PostgreSQL) with an ORM and migrations** instead of a zero-config option (SQLite), to demonstrate working with a production-realistic database setup — schema design, migrations, indexes, transactions, foreign keys. TypeScript across the whole stack (backend and frontend) gives strict typing and a shared data shape between the API and the UI.
 
-## Štruktúra projektu
+## Project structure
 
 ```
 Newapp/
-  docker-compose.yml     PostgreSQL kontajner
-  server/                Express REST API
-    prisma/               schema.prisma + seed skript
+  docker-compose.yml     PostgreSQL container
+  render.yaml             Render Blueprint (Postgres + API web service)
+  server/                 Express REST API
+    prisma/                schema.prisma + seed script
     src/
-      config/              env validácia, Prisma client
-      middleware/           auth (JWT), error handler, zod validácia
-      modules/               auth, accounts, categories, transactions, budgets, dashboard
-        <modul>/<modul>.schema.ts     Zod validačné schémy
-        <modul>/<modul>.service.ts    business logika + Prisma dotazy
-        <modul>/<modul>.controller.ts HTTP vrstva
-        <modul>/<modul>.routes.ts     Express router
-      utils/                AppError, catchAsync, JWT helpery
-  client/                 React + Vite frontend
+      config/               env validation, Prisma client
+      middleware/            auth (JWT), error handler, zod validation
+      modules/                auth, accounts, categories, transactions, budgets, dashboard
+        <module>/<module>.schema.ts     Zod validation schemas
+        <module>/<module>.service.ts    business logic + Prisma queries
+        <module>/<module>.controller.ts HTTP layer
+        <module>/<module>.routes.ts     Express router
+      utils/                 AppError, catchAsync, JWT helpers
+  client/                  React + Vite frontend
+    vercel.json              Vercel deploy config (SPA rewrites)
     src/
-      api/                  typované HTTP volania na backend (axios)
-      components/           ui/ (Button, Input, Modal, ...), layout/, charts/, + moduly (accounts/, categories/, ...)
-      context/, hooks/       AuthContext, useAuth, useAccounts, useTransactions, ...
-      pages/                 DashboardPage, TransactionsPage, AccountsPage, CategoriesPage, BudgetsPage
-      routes/                ProtectedRoute
+      api/                   typed HTTP calls to the backend (axios)
+      components/            ui/ (Button, Input, Modal, ...), layout/, charts/, + per-domain folders (accounts/, categories/, ...)
+      context/, hooks/        AuthContext, useAuth, useAccounts, useTransactions, ...
+      pages/                  DashboardPage, TransactionsPage, AccountsPage, CategoriesPage, BudgetsPage
+      routes/                 ProtectedRoute
 ```
 
-Každý doménový modul (accounts, categories, transactions, budgets, dashboard) má na backende rovnakú štruktúru `schema → service → controller → routes`, na frontende zodpovedajúci `api/*.ts` + `hooks/use*.ts` + komponenty v samostatnom priečinku. Nič nie je "na jednej hromade" — pridanie novej funkcie znamená pridať nový modul, nie meniť existujúce súbory.
+Every domain module (accounts, categories, transactions, budgets, dashboard) follows the same `schema → service → controller → routes` structure on the backend, with a matching `api/*.ts` + `hooks/use*.ts` + components folder on the frontend. Nothing lives in one giant pile — adding a feature means adding a new module, not editing existing files.
 
-## Funkcie
+## Features
 
-- Registrácia / prihlásenie / odhlásenie (JWT v httpOnly cookie, heslá hashované cez bcrypt)
-- Správa účtov (hotovosť, bankový účet, karta, sporiaci účet...) s automaticky dopočítaným aktuálnym zostatkom
-- Vlastné kategórie príjmov a výdavkov (farba + ikona) — nový účet dostane sadu predvolených kategórií
-- Transakcie s filtrami (typ, účet, kategória, dátumový rozsah, fulltext v poznámke) a stránkovaním
-- Mesačné rozpočty na výdavkové kategórie s vizuálnym progresom míňania
-- Dashboard: celkový zostatok, príjmy/výdavky za mesiac, koláčový graf výdavkov podľa kategórií, stĺpcový graf príjmov vs. výdavkov za posledných 6 mesiacov
+- Register / log in / log out (JWT in an httpOnly cookie, passwords hashed with bcrypt)
+- Account management (cash, bank account, card, savings...) with an automatically computed current balance
+- Custom income/expense categories (color + icon) — every new account gets a set of default categories
+- Transactions with filters (type, account, category, date range, note search) and pagination
+- Monthly budgets per expense category with a visual spending progress bar
+- Dashboard: total balance, monthly income/expense, a pie chart of spending by category, a bar chart of income vs. expense over the last 6 months
 
-## Spustenie lokálne
+## Running locally
 
-Vyžaduje Node.js 18+ a Docker (Docker Desktop na Windows/Mac, alebo Docker Engine na Linuxe).
+Requires Node.js 18+ and Docker (Docker Desktop on Windows/Mac, or Docker Engine on Linux).
 
-### 1. Databáza (PostgreSQL cez Docker)
+### 1. Database (PostgreSQL via Docker)
 
 ```bash
 docker compose up -d
 ```
 
-Tým sa spustí Postgres na `localhost:5432` (údaje v `docker-compose.yml`: `financetrack` / `financetrack`).
+This starts Postgres on `localhost:5432` (credentials in `docker-compose.yml`: `financetrack` / `financetrack`).
 
 ### 2. Backend
 
 ```bash
 cd server
 npm install
-cp .env.example .env        # predvolené hodnoty sedia s docker-compose.yml
-npm run prisma:migrate      # vytvorí tabuľky v databáze
-npm run seed                # naplní demo účtom, kategóriami a transakciami
-npm run dev                 # API beží na http://localhost:4000
+cp .env.example .env        # defaults already match docker-compose.yml
+npm run prisma:migrate      # creates the database tables
+npm run seed                # seeds a demo account, categories and transactions
+npm run dev                 # API runs on http://localhost:4000
 ```
 
-Demo prihlásenie po seede: **e-mail** `demo@financetrack.app`, **heslo** `demo1234`.
+Demo login after seeding: **email** `demo@financetrack.app`, **password** `demo1234`.
 
 ### 3. Frontend
 
-V druhom termináli:
+In a second terminal:
 
 ```bash
 cd client
 npm install
-npm run dev                 # React beží na http://localhost:5173
+npm run dev                 # React runs on http://localhost:5173
 ```
 
-Vite dev server proxuje `/api` na backend (`vite.config.ts`), takže žiadne CORS starosti počas vývoja.
+The Vite dev server proxies `/api` to the backend (`vite.config.ts`), so there's no CORS setup needed during development.
 
-### Prisma Studio (voliteľné)
+### Prisma Studio (optional)
 
-Vizuálny prehľad dát v databáze:
+Visual browser for the database contents:
 
 ```bash
 cd server && npm run prisma:studio
 ```
 
-## Produkčný build
+## Production build
 
 ```bash
 cd server && npm run build && npm start
-cd client && npm run build   # výstup v client/dist, servuj cez ľubovoľný statický hosting alebo Express static
+cd client && npm run build   # output in client/dist, serve via any static host or Express static
 ```
 
-## Bezpečnosť — čo appka rieši
+## Security — what the app handles
 
-- Heslá nikdy neopúšťajú server v čitateľnej podobe (bcrypt, 12 salt rounds)
-- JWT v `httpOnly` + `sameSite=lax` cookie (nie je čitateľný z JS, obmedzená CSRF plocha)
-- Všetky vstupy validované cez Zod na hranici API, nie len na frontende
-- Každý dotaz na dáta (účty, kategórie, transakcie, rozpočty) je zviazaný na `userId` prihláseného používateľa — nie je možné pristúpiť k cudzím dátam len uhádnutím ID
-- Rate limiting na `/api/auth/*` proti brute-force útokom na heslá
-- Cudzie kľúče a databázové constrainty (napr. kategóriu použitú v transakcii nejde zmazať) chránia integritu dát aj keby zlyhala validácia v aplikačnej vrstve
+- Passwords never leave the server in plain text (bcrypt, 12 salt rounds)
+- JWT in an `httpOnly` cookie (`sameSite=lax` in dev, `sameSite=none; secure` in production for cross-origin frontend/backend) — not readable from JS, limited CSRF surface
+- All input validated with Zod at the API boundary, not just on the frontend
+- Every data query (accounts, categories, transactions, budgets) is scoped to the logged-in user's `userId` — you can't reach someone else's data just by guessing an ID
+- Rate limiting on `/api/auth/*` against password brute-forcing
+- Foreign keys and database constraints (e.g. a category used in a transaction can't be deleted) protect data integrity even if application-level validation is bypassed
 
-## Možné rozšírenia (going further)
+## Possible extensions (going further)
 
-- Opakované (recurring) transakcie — napr. mesačný nájom sa pridá automaticky
-- Sporiace ciele (savings goals) s progresom
-- Export transakcií do CSV / PDF report
-- Viac mien naraz s prepočtom kurzu
-- Refresh token rotácia namiesto jedného dlho platného JWT
+- Recurring transactions — e.g. a monthly rent payment added automatically
+- Savings goals with progress tracking
+- Export transactions to CSV / PDF report
+- Multi-currency support with exchange rate conversion
+- Refresh token rotation instead of a single long-lived JWT
 
-## Licencia
+## License
 
 MIT
