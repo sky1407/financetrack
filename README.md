@@ -9,7 +9,7 @@ Full-stack personal finance tracker — accounts, categories, transactions, mont
 - **Backend:** Node.js + Express, TypeScript (`strict` mode), [Prisma ORM](https://www.prisma.io/) on top of **PostgreSQL**, JWT authentication (httpOnly cookie) + bcrypt password hashing, input validation via [Zod](https://zod.dev/), rate limiting on auth endpoints.
 - **Frontend:** React + Vite + TypeScript, [Tailwind CSS](https://tailwindcss.com/), [TanStack Query](https://tanstack.com/query) for server-state management, `react-hook-form` + Zod for form validation, [Recharts](https://recharts.org/) for charts.
 - **Database:** PostgreSQL 16, spun up via Docker Compose — no manual DB install needed on your machine.
-- **Deployment:** frontend on Vercel, backend + PostgreSQL on Render (see `render.yaml` / `client/vercel.json`).
+- **Deployment:** frontend on Vercel, backend on [Fly.io](https://fly.io/) (see `server/fly.toml` / `server/Dockerfile`), PostgreSQL on [Neon](https://neon.tech/) (serverless, free tier). Fly's machines scale to zero when idle and wake in ~1-2s, avoiding the long cold starts of always-free container platforms.
 
 ## Why this stack
 
@@ -19,9 +19,10 @@ The project deliberately uses a **real relational database (PostgreSQL) with an 
 
 ```
 Newapp/
-  docker-compose.yml     PostgreSQL container
-  render.yaml             Render Blueprint (Postgres + API web service)
+  docker-compose.yml     PostgreSQL container (local dev only)
   server/                 Express REST API
+    Dockerfile              Fly.io build image
+    fly.toml                Fly.io app + release_command (prisma migrate deploy)
     prisma/                schema.prisma + seed script
     src/
       config/               env validation, Prisma client
@@ -104,6 +105,36 @@ cd server && npm run prisma:studio
 cd server && npm run build && npm start
 cd client && npm run build   # output in client/dist, serve via any static host or Express static
 ```
+
+## Deployment (Fly.io + Neon)
+
+### 1. Database — Neon
+
+1. Create a free project at [neon.tech](https://neon.tech/).
+2. Copy the pooled connection string (`postgresql://...`) — this becomes `DATABASE_URL`.
+
+### 2. Backend — Fly.io
+
+```bash
+# install flyctl if you don't have it: https://fly.io/docs/flyctl/install/
+fly auth login
+
+cd server
+fly launch --no-deploy   # detects fly.toml, keep the existing app name or set your own
+
+fly secrets set \
+  DATABASE_URL="<neon connection string>" \
+  JWT_SECRET="$(openssl rand -hex 32)" \
+  CLIENT_ORIGIN="https://financetrack-lemon.vercel.app"
+
+fly deploy
+```
+
+`release_command` in `fly.toml` runs `prisma migrate deploy` automatically before each deploy, so the schema stays in sync. Check health: `curl https://<your-app>.fly.dev/api/health`.
+
+### 3. Frontend — Vercel
+
+In the Vercel project settings, set the environment variable `VITE_API_URL` to `https://<your-app>.fly.dev`, then redeploy the frontend so it points at the new backend.
 
 ## Security — what the app handles
 
