@@ -16,5 +16,9 @@ export function getApiErrorMessage(error: unknown, fallback = "Nastala chyba. Sk
     const err = error as AxiosError<ApiErrorBody>;
     return err.response?.data?.error ?? fallback;
   }
+  // Demo mode throws plain Errors (no backend involved) with a user-facing message.
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
   return fallback;
 }

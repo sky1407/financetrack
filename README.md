@@ -2,14 +2,20 @@
 
 Full-stack personal finance tracker — accounts, categories, transactions, monthly budgets and a dashboard with charts. Built as a modern, fully typed full-stack project (React + Express + PostgreSQL) to demonstrate practical web application development skills.
 
-**Live demo:** https://financetrack-lemon.vercel.app/login?demo=1 (signs you in instantly as a demo user, no registration needed — or register your own account)
+**Live demo:** https://financetrack-lemon.vercel.app/login?demo=1 — opens straight into a populated dashboard, no registration or login required.
+
+The public demo runs **entirely client-side** (seeded, in-memory data, no API calls), so it always loads instantly and never depends on a backend/database being awake — see [Demo mode](#demo-mode) below. To try the real full-stack flow (register your own account, real JWT auth, data persisted in PostgreSQL), use "alebo sa prihlás vlastným účtom" on the login page instead — that talks to a backend you deploy yourself (see "Deployment" below).
 
 ## Tech stack
 
 - **Backend:** Node.js + Express, TypeScript (`strict` mode), [Prisma ORM](https://www.prisma.io/) on top of **PostgreSQL**, JWT authentication (httpOnly cookie) + bcrypt password hashing, input validation via [Zod](https://zod.dev/), rate limiting on auth endpoints.
 - **Frontend:** React + Vite + TypeScript, [Tailwind CSS](https://tailwindcss.com/), [TanStack Query](https://tanstack.com/query) for server-state management, `react-hook-form` + Zod for form validation, [Recharts](https://recharts.org/) for charts.
 - **Database:** PostgreSQL 16, spun up via Docker Compose — no manual DB install needed on your machine.
-- **Deployment:** frontend on Vercel, backend on [Fly.io](https://fly.io/) (see `server/fly.toml` / `server/Dockerfile`), PostgreSQL on [Neon](https://neon.tech/) (serverless, free tier). Fly's machines scale to zero when idle and wake in ~1-2s, avoiding the long cold starts of always-free container platforms.
+- **Deployment:** frontend on Vercel. The Express/PostgreSQL backend is **not currently kept running** — the sections below document how to deploy it yourself (Fly.io + Neon), since the public demo link no longer needs it.
+
+## Demo mode
+
+`client/src/lib/demoMode.ts` + `client/src/lib/demoStore.ts` implement a small in-memory "backend" that runs entirely in the browser: seeded accounts, categories, ~6 months of transactions and budgets, with the same business rules as the real API (account balances, budget progress, dashboard aggregation). `client/src/api/*.ts` transparently routes to it instead of the real backend whenever demo mode is active (`?demo=1`, or the "Vyskúšať demo" button), so every page, chart and CRUD action works without a server. Data resets on a full page reload — expected for a public, shared demo link.
 
 ## Why this stack
 
@@ -106,7 +112,9 @@ cd server && npm run build && npm start
 cd client && npm run build   # output in client/dist, serve via any static host or Express static
 ```
 
-## Deployment (Fly.io + Neon)
+## Deployment (optional — self-hosting the real backend)
+
+The live demo link doesn't need any of this (see [Demo mode](#demo-mode) above). Follow these steps only if you want the real backend running too — e.g. to test actual registration/login, JWT auth and PostgreSQL persistence.
 
 ### 1. Database — Neon
 
@@ -134,7 +142,7 @@ fly deploy
 
 ### 3. Frontend — Vercel
 
-In the Vercel project settings, set the environment variable `VITE_API_URL` to `https://<your-app>.fly.dev`, then redeploy the frontend so it points at the new backend.
+In the Vercel project settings, set the environment variable `VITE_API_URL` to `https://<your-app>.fly.dev`, then redeploy the frontend so it points at the new backend. Until `VITE_API_URL` is set, "register" / "log in with your own account" on the live site will fail (no backend to call) — only the `?demo=1` client-side demo works, which is the intended default.
 
 ## Security — what the app handles
 
