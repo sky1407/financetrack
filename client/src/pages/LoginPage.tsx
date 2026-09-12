@@ -16,14 +16,11 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-const DEMO_CREDENTIALS = { email: "demo@financetrack.app", password: "demo1234" };
-
 export function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, loginDemo } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   const {
     register,
@@ -31,24 +28,18 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginFormSchema) });
 
-  async function loginAsDemo() {
-    setFormError(null);
-    setIsDemoLoading(true);
-    try {
-      await login(DEMO_CREDENTIALS);
-      navigate("/", { replace: true });
-    } catch (error) {
-      setFormError(getApiErrorMessage(error, "Demo prihlásenie zlyhalo."));
-    } finally {
-      setIsDemoLoading(false);
-    }
+  // Beží čisto vo frontende (žiadne volanie API), takže funguje okamžite a
+  // nezávisle od toho, či je backend hore.
+  function handleDemoClick() {
+    loginDemo();
+    navigate("/", { replace: true });
   }
 
   // Umožňuje priamy odkaz "/login?demo=1" (napr. z CV alebo portfólia), ktorý prihlási
   // rovno na demo účet bez toho, aby návštevník musel čokoľvek vypĺňať alebo klikať.
   useEffect(() => {
     if (searchParams.get("demo") === "1" && !user) {
-      void loginAsDemo();
+      handleDemoClick();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -67,13 +58,7 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Prihlásenie" subtitle="Prihlás sa a spravuj svoje financie">
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => void loginAsDemo()}
-        isLoading={isDemoLoading}
-        className="w-full"
-      >
+      <Button type="button" variant="secondary" onClick={handleDemoClick} className="w-full">
         Vyskúšať demo bez registrácie
       </Button>
 
