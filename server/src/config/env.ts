@@ -8,6 +8,8 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().min(1).default("http://localhost:5173"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("7d"),
+  /** Optional: without it the app runs normally, only statement imports are unavailable. */
+  REDIS_URL: z.string().url().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
