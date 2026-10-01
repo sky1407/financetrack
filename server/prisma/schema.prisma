@@ -48,6 +48,7 @@ model User {
   transactions  Transaction[]
   budgets       Budget[]
   importBatches ImportBatch[]
+  categoryRules CategoryRule[]
 
   @@map("users")
 }
@@ -82,6 +83,7 @@ model Category {
 
   transactions Transaction[]
   budgets      Budget[]
+  rules        CategoryRule[]
 
   @@unique([userId, name, type])
   @@index([userId])
@@ -141,6 +143,22 @@ model ImportBatch {
   @@index([userId, createdAt])
   @@index([accountId])
   @@map("import_batches")
+}
+
+/// Auto-categorization rule: a transaction whose note contains `pattern` goes to `category`.
+model CategoryRule {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  /// Stored lower-cased; matched as a case-insensitive substring of the transaction note.
+  pattern    String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, pattern])
+  @@index([categoryId])
+  @@map("category_rules")
 }
 
 model Budget {
