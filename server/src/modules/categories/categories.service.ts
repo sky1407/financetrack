@@ -23,10 +23,12 @@ export async function updateCategory(userId: string, categoryId: string, input: 
 
 export async function deleteCategory(userId: string, categoryId: string) {
   await findOwnedCategory(userId, categoryId);
-  const usageCount = await prisma.transaction.count({ where: { categoryId } });
-  if (usageCount > 0) {
-    throw AppError.conflict("Kategória sa nedá zmazať, pretože sa používa v transakciách.");
-  }
-  // Budget.category has onDelete: Cascade, so related budgets are deleted automatically.
-  await prisma.category.delete({ where: { id: categoryId } });
+  await prisma.$transaction(async (tx) => {
+    const usageCount = await tx.transaction.count({ where: { categoryId } });
+    if (usageCount > 0) {
+      throw AppError.conflict("Kategória sa nedá zmazať, pretože sa používa v transakciách.");
+    }
+    // Budget.category has onDelete: Cascade, so related budgets are deleted automatically.
+    await tx.category.delete({ where: { id: categoryId } });
+  });
 }
