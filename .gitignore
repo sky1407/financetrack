@@ -23,3 +23,8 @@ npm-debug.log*
 
 # vite
 client/.vite/
+
+# real bank statements – never commit (tests use fictional data only)
+statements/
+*.statement.csv
+*account-statement*

@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategories } from "@/hooks/useCategories";
+import { useCategoryRules } from "@/hooks/useCategoryRules";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -20,6 +21,7 @@ export function TransactionsPage() {
   const { page, isLoading, createTransaction, updateTransaction, deleteTransaction } = useTransactions(filters);
   const { accounts } = useAccounts();
   const { categories } = useCategories();
+  const { createRule } = useCategoryRules();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -27,6 +29,7 @@ export function TransactionsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function openCreateForm() {
     setEditingTransaction(null);
@@ -43,11 +46,21 @@ export function TransactionsPage() {
   async function handleSubmit(values: TransactionFormValues) {
     setIsSaving(true);
     setError(null);
+    setNotice(null);
+    const { rememberRule, rulePattern, ...input } = values;
     try {
       if (editingTransaction) {
-        await updateTransaction({ id: editingTransaction.id, input: values });
+        await updateTransaction({ id: editingTransaction.id, input });
       } else {
-        await createTransaction(values);
+        await createTransaction(input);
+      }
+      if (rememberRule && rulePattern) {
+        const { recategorized } = await createRule({ pattern: rulePattern, categoryId: input.categoryId });
+        setNotice(
+          recategorized > 0
+            ? `Pravidlo uložené a zaradilo ďalších ${recategorized} transakcií.`
+            : "Pravidlo uložené. Použije sa pri ďalších importoch."
+        );
       }
       setIsFormOpen(false);
     } catch (err) {
@@ -75,7 +88,7 @@ export function TransactionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">Transakcie</h1>
         <Button onClick={openCreateForm} disabled={!canCreate} title={canCreate ? undefined : "Najprv vytvor účet a kategóriu"}>
           <Plus className="h-4 w-4" />
@@ -84,6 +97,7 @@ export function TransactionsPage() {
       </div>
 
       {error && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
+      {notice && <p className="rounded-lg bg-green-50 px-4 py-2 text-sm text-green-700">{notice}</p>}
 
       <TransactionFilters accounts={accounts} categories={categories} filters={filters} onChange={setFilters} />
 
@@ -124,6 +138,7 @@ export function TransactionsPage() {
           onSubmit={handleSubmit}
           onCancel={() => setIsFormOpen(false)}
           isSubmitting={isSaving}
+          canRememberRule={Boolean(editingTransaction?.note)}
         />
       </Modal>
 

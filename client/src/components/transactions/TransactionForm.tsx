@@ -8,14 +8,22 @@ import { Button } from "@/components/ui/Button";
 import { toDateInputValue } from "@/lib/format";
 import type { Account, Category } from "@/types";
 
-const transactionFormSchema = z.object({
-  type: z.enum(["INCOME", "EXPENSE"]),
-  accountId: z.string().min(1, "Zvoľ účet."),
-  categoryId: z.string().min(1, "Zvoľ kategóriu."),
-  amount: z.coerce.number({ invalid_type_error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
-  date: z.string().min(1, "Zvoľ dátum."),
-  note: z.string().max(200).optional(),
-});
+const transactionFormSchema = z
+  .object({
+    type: z.enum(["INCOME", "EXPENSE"]),
+    accountId: z.string().min(1, "Zvoľ účet."),
+    categoryId: z.string().min(1, "Zvoľ kategóriu."),
+    amount: z.coerce.number({ invalid_type_error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
+    date: z.string().min(1, "Zvoľ dátum."),
+    note: z.string().max(200).optional(),
+    /** When set, the page also saves a categorization rule "note contains rulePattern → categoryId". */
+    rememberRule: z.boolean().default(false),
+    rulePattern: z.string().max(100, "Vzor môže mať najviac 100 znakov.").optional(),
+  })
+  .refine((v) => !v.rememberRule || (v.rulePattern ?? "").trim().length >= 2, {
+    message: "Vzor musí mať aspoň 2 znaky.",
+    path: ["rulePattern"],
+  });
 
 export type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 
@@ -26,6 +34,7 @@ export function TransactionForm({
   onSubmit,
   onCancel,
   isSubmitting,
+  canRememberRule = false,
 }: {
   accounts: Account[];
   categories: Category[];
@@ -33,6 +42,8 @@ export function TransactionForm({
   onSubmit: (values: TransactionFormValues) => void | Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
+  /** Offer "remember for similar transactions" (edit mode of a transaction with a note). */
+  canRememberRule?: boolean;
 }) {
   const {
     register,
@@ -48,11 +59,14 @@ export function TransactionForm({
       categoryId: "",
       amount: 0,
       date: toDateInputValue(new Date()),
+      rememberRule: false,
       ...defaultValues,
+      rulePattern: defaultValues?.rulePattern ?? defaultValues?.note ?? "",
     },
   });
 
   const selectedType = watch("type");
+  const rememberRule = watch("rememberRule");
   const categoriesForType = categories.filter((c) => c.type === selectedType);
 
   useEffect(() => {
@@ -92,6 +106,23 @@ export function TransactionForm({
       </div>
 
       <Input label="Poznámka (voliteľné)" placeholder="napr. Nákup potravín" error={errors.note?.message} {...register("note")} />
+
+      {canRememberRule && (
+        <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" className="h-4 w-4 rounded border-slate-300" {...register("rememberRule")} />
+            Zapamätať kategóriu pre podobné transakcie
+          </label>
+          {rememberRule && (
+            <Input
+              label="Popis obsahuje"
+              placeholder="napr. bolt"
+              error={errors.rulePattern?.message}
+              {...register("rulePattern")}
+            />
+          )}
+        </div>
+      )}
 
       <div className="mt-2 flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onCancel}>

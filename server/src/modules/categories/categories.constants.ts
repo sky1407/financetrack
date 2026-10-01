@@ -15,3 +15,6 @@ export const DEFAULT_CATEGORIES: Array<{ name: string; type: CategoryType; color
   { name: "Investície", type: CategoryType.INCOME, color: "#8b5cf6", icon: "trending-up" },
   { name: "Ostatné príjmy", type: CategoryType.INCOME, color: "#64748b", icon: "tag" },
 ];
+
+/** Fallback category for imported transactions no rule matched; created on demand per type. */
+export const UNCATEGORIZED = { name: "Nezaradené", color: "#94a3b8", icon: "tag" } as const;
