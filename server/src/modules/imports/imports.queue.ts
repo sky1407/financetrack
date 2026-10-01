@@ -38,7 +38,13 @@ export async function enqueueImport(batchId: string): Promise<void> {
 /** Starts the in-process worker; does nothing when Redis is not configured. */
 export function startImportWorker(processor: (job: Job<ImportJobData>) => Promise<void>): void {
   if (!connection || worker) return;
-  worker = new Worker<ImportJobData>(QUEUE_NAME, processor, { connection, concurrency: 2 });
+  worker = new Worker<ImportJobData>(QUEUE_NAME, processor, {
+    connection,
+    concurrency: 2,
+    // Long-poll 30 s instead of 5 s on an empty queue: new jobs still wake the worker immediately,
+    // but an idle worker sends ~6x fewer commands (managed Redis plans meter commands).
+    drainDelay: 30,
+  });
   worker.on("failed", (job, error) => {
     console.error(`Import job ${job?.id ?? "?"} failed (attempt ${job?.attemptsMade ?? "?"}):`, error.message);
   });
