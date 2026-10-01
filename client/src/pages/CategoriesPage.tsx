@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryForm, type CategoryFormValues } from "@/components/categories/CategoryForm";
+import { CategoryRulesCard } from "@/components/categories/CategoryRulesCard";
 import { getCategoryIcon } from "@/lib/categoryIcons";
 import { getApiErrorMessage } from "@/api/client";
 import type { Category, CategoryType } from "@/types";
@@ -124,9 +125,9 @@ export function CategoriesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">Kategórie</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => openCreateForm("INCOME")}>
             <Plus className="h-4 w-4" />
             Príjmová kategória
@@ -152,6 +153,8 @@ export function CategoriesPage() {
           <CategoryGroup title="Príjmy" categories={incomeCategories} onEdit={openEditForm} onDelete={setDeletingCategory} />
         </div>
       )}
+
+      {categories.length > 0 && <CategoryRulesCard categories={categories} />}
 
       <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title={editingCategory ? "Upraviť kategóriu" : "Nová kategória"}>
         <CategoryForm
