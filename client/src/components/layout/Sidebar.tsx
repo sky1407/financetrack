@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, ArrowLeftRight, Wallet, Tags, PiggyBank, Wallet2 } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, Wallet, Tags, PiggyBank, Wallet2, FileUp } from "lucide-react";
 import clsx from "clsx";
 
 const links = [
@@ -8,6 +8,7 @@ const links = [
   { to: "/budgets", label: "Rozpočty", icon: PiggyBank },
   { to: "/accounts", label: "Účty", icon: Wallet },
   { to: "/categories", label: "Kategórie", icon: Tags },
+  { to: "/import", label: "Import výpisu", icon: FileUp },
 ];
 
 export function Sidebar() {

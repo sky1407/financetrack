@@ -25,3 +25,9 @@ export const CATEGORY_COLOR_SWATCHES = [
   "#64748b",
   "#0ca30c",
 ];
+
+/** Account types a bank statement can be imported into (mirrors the backend rule). */
+export const IMPORTABLE_ACCOUNT_TYPES: readonly AccountType[] = ["BANK", "CARD", "SAVINGS"];
+
+/** Must match the server's upload limit. */
+export const MAX_STATEMENT_BYTES = 2 * 1024 * 1024;

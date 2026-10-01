@@ -4,6 +4,8 @@ import type {
   Category,
   CategoryType,
   DashboardSummary,
+  SkippedRow,
+  StatementImport,
   Transaction,
   TransactionsPage,
   TransactionType,
@@ -12,6 +14,7 @@ import type { AccountInput } from "@/api/accounts";
 import type { CategoryInput } from "@/api/categories";
 import type { TransactionFilters, TransactionInput } from "@/api/transactions";
 import type { BudgetInput } from "@/api/budgets";
+import { IMPORTABLE_ACCOUNT_TYPES } from "@/lib/constants";
 
 /**
  * In-memory backend stand-in for demo mode. Mirrors the real API's shapes
@@ -236,6 +239,98 @@ function seedBudgets(): void {
   for (const b of seed) budgets.set(b.id, b);
 }
 
+// ---- sample statement import ----
+
+/** Fictional statement rows "imported" in demo mode; `daysAgo` keeps them in the recent past. */
+const SAMPLE_STATEMENT: Array<{
+  daysAgo: number;
+  description: string;
+  amount: number;
+  fee?: number;
+  product?: "SAVINGS";
+  state?: "PENDING";
+}> = [
+  { daysAgo: 9, description: "Lidl", amount: -34.12 },
+  { daysAgo: 8, description: "Bolt", amount: -7.9 },
+  { daysAgo: 7, description: "Spotify", amount: -10.99 },
+  { daysAgo: 6, description: "Bankomat", amount: -60, fee: 1.99 },
+  { daysAgo: 5, description: "Vrátenie za lístky", amount: 25 },
+  { daysAgo: 4, description: "Kaufland", amount: -52.4 },
+  { daysAgo: 3, description: "Úroky", amount: 1.85, product: "SAVINGS" },
+  { daysAgo: 1, description: "Wolt", amount: -18.5, state: "PENDING" },
+];
+const SAMPLE_FILE_NAME = "ukazkovy-vypis-revolut.csv";
+/** Simulated background processing time, so the UI shows the same states as with the real queue. */
+const SAMPLE_PROCESSING_MS = 1500;
+const UNCATEGORIZED_IDS: Record<CategoryType, string> = {
+  EXPENSE: "demo_cat_nezaradene_v",
+  INCOME: "demo_cat_nezaradene_p",
+};
+
+const imports = new Map<string, { batch: StatementImport; readyAt: number }>();
+// accountId -> fingerprints already imported, so a repeated import reports duplicates like the real API.
+const importedFingerprints = new Map<string, Set<string>>();
+
+function ensureUncategorized(type: CategoryType): string {
+  const id = UNCATEGORIZED_IDS[type];
+  if (!categories.has(id)) {
+    categories.set(id, { id, name: "Nezaradené", type, color: "#94a3b8", icon: "tag", createdAt: new Date().toISOString() });
+  }
+  return id;
+}
+
+/** Applies the sample rows to an account, mirroring the server's filtering, fee and de-duplication rules. */
+function processSampleImport(batch: StatementImport): void {
+  const account = accountOf(batch.accountId);
+  const accountProduct = account.type === "SAVINGS" ? "SAVINGS" : "CURRENT";
+  const seen = importedFingerprints.get(account.id) ?? new Set<string>();
+  importedFingerprints.set(account.id, seen);
+  const skipped: SkippedRow[] = [];
+  let imported = 0;
+  let duplicates = 0;
+
+  const add = (fingerprint: string, signedAmount: number, note: string, date: Date) => {
+    if (seen.has(fingerprint)) {
+      duplicates += 1;
+      return;
+    }
+    seen.add(fingerprint);
+    imported += 1;
+    const type: TransactionType = signedAmount > 0 ? "INCOME" : "EXPENSE";
+    addTransaction({
+      id: nextId("tx"),
+      accountId: account.id,
+      categoryId: ensureUncategorized(type),
+      type,
+      amount: money(Math.abs(signedAmount)),
+      note,
+      date: date.toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+  };
+
+  SAMPLE_STATEMENT.forEach((row, index) => {
+    const rowNumber = index + 2;
+    if (row.state) return skipped.push({ row: rowNumber, reason: `stav ${row.state}` });
+    const rowProduct = row.product ?? "CURRENT";
+    if (rowProduct !== accountProduct) {
+      return skipped.push({ row: rowNumber, reason: `iný produkt (${rowProduct === "SAVINGS" ? "Vklad" : "Bežný"})` });
+    }
+    const today = new Date();
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - row.daysAgo, 12);
+    add(`sample_${index}`, row.amount, row.description, date);
+    if (row.fee) add(`sample_${index}_fee`, -row.fee, `Poplatok – ${row.description}`, date);
+  });
+
+  Object.assign(batch, {
+    status: "DONE",
+    imported,
+    duplicates,
+    skippedRows: skipped,
+    completedAt: new Date().toISOString(),
+  } satisfies Partial<StatementImport>);
+}
+
 seedTransactions();
 seedBudgets();
 
@@ -388,6 +483,33 @@ export const demoStore = {
   deleteBudget(budgetId: string): void {
     if (!budgets.has(budgetId)) throw new Error("Rozpočet sa nenašiel.");
     budgets.delete(budgetId);
+  },
+
+  startSampleImport(accountId: string): StatementImport {
+    const account = accountOf(accountId);
+    if (!IMPORTABLE_ACCOUNT_TYPES.includes(account.type)) {
+      throw new Error("Výpis sa dá importovať len do bankového, kartového alebo sporiaceho účtu.");
+    }
+    const batch: StatementImport = {
+      id: nextId("imp"),
+      accountId,
+      fileName: SAMPLE_FILE_NAME,
+      status: "PROCESSING",
+      imported: 0,
+      duplicates: 0,
+      skippedRows: null,
+      error: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    };
+    imports.set(batch.id, { batch, readyAt: Date.now() + SAMPLE_PROCESSING_MS });
+    return { ...batch };
+  },
+  getImport(importId: string): StatementImport {
+    const stored = imports.get(importId);
+    if (!stored) throw new Error("Import sa nenašiel.");
+    if (stored.batch.status === "PROCESSING" && Date.now() >= stored.readyAt) processSampleImport(stored.batch);
+    return { ...stored.batch };
   },
 
   getDashboard(month: number, year: number): DashboardSummary {

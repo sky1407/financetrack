@@ -97,3 +97,24 @@ export interface DashboardSummary {
 export interface ApiErrorBody {
   error: string;
 }
+
+export type ImportStatus = "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+
+export interface SkippedRow {
+  row: number;
+  reason: string;
+}
+
+/** A bank statement upload and the outcome of its background processing. */
+export interface StatementImport {
+  id: string;
+  accountId: string;
+  fileName: string;
+  status: ImportStatus;
+  imported: number;
+  duplicates: number;
+  skippedRows: SkippedRow[] | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
