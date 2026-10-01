@@ -2,8 +2,12 @@ import type {
   Account,
   Budget,
   Category,
+  CategoryRule,
   CategoryType,
+  CreatedCategoryRule,
   DashboardSummary,
+  SkippedRow,
+  StatementImport,
   Transaction,
   TransactionsPage,
   TransactionType,
@@ -12,6 +16,9 @@ import type { AccountInput } from "@/api/accounts";
 import type { CategoryInput } from "@/api/categories";
 import type { TransactionFilters, TransactionInput } from "@/api/transactions";
 import type { BudgetInput } from "@/api/budgets";
+import type { CategoryRuleInput } from "@/api/categoryRules";
+import { IMPORTABLE_ACCOUNT_TYPES } from "@/lib/constants";
+import { matchCategory, normalizeText, UNCATEGORIZED_NAME, type MatchableRule } from "@/lib/categoryRules";
 
 /**
  * In-memory backend stand-in for demo mode. Mirrors the real API's shapes
@@ -20,6 +27,11 @@ import type { BudgetInput } from "@/api/budgets";
  * same as against the real server. Nothing here is persisted — a full page
  * reload reseeds fresh demo data, which is the desired behaviour for a
  * public, shared demo link.
+ *
+ * Entities are stored in Map<id, T> for O(1) lookup/insert/delete, and each
+ * account's balance is maintained as a running delta in `balanceIndex`
+ * (updated on every transaction create/update/delete) instead of being
+ * recomputed by scanning all transactions on every read.
  */
 
 type StoredAccount = Omit<Account, "currentBalance">;
@@ -88,49 +100,59 @@ const CATEGORY_SEED: Array<{ id: string; name: string; type: CategoryType; color
   { id: "demo_cat_ostatne_p", name: "Ostatné príjmy", type: "INCOME", color: "#64748b", icon: "tag" },
 ];
 
-const seedCreatedAt = new Date(Date.now() - 200 * 86_400_000).toISOString();
-
-let categories: Category[] = CATEGORY_SEED.map((c) => ({ ...c, createdAt: seedCreatedAt }));
-
-let accounts: StoredAccount[] = [
-  { id: "demo_acc_bezny", name: "Bežný účet", type: "BANK", currency: "EUR", initialBalance: money(400), createdAt: seedCreatedAt },
-  { id: "demo_acc_hotovost", name: "Hotovosť", type: "CASH", currency: "EUR", initialBalance: money(50), createdAt: seedCreatedAt },
-  { id: "demo_acc_sporenie", name: "Sporiaci účet", type: "SAVINGS", currency: "EUR", initialBalance: money(2000), createdAt: seedCreatedAt },
+const ACCOUNT_SEED: StoredAccount[] = [
+  { id: "demo_acc_bezny", name: "Bežný účet", type: "BANK", currency: "EUR", initialBalance: money(400), createdAt: "" },
+  { id: "demo_acc_hotovost", name: "Hotovosť", type: "CASH", currency: "EUR", initialBalance: money(50), createdAt: "" },
+  { id: "demo_acc_sporenie", name: "Sporiaci účet", type: "SAVINGS", currency: "EUR", initialBalance: money(2000), createdAt: "" },
 ];
 
-let transactions: StoredTransaction[] = [];
-let budgets: StoredBudget[] = [];
+const seedCreatedAt = new Date(Date.now() - 200 * 86_400_000).toISOString();
+for (const a of ACCOUNT_SEED) a.createdAt = seedCreatedAt;
+
+const categories = new Map<string, Category>(CATEGORY_SEED.map((c) => [c.id, { ...c, createdAt: seedCreatedAt }]));
+const accounts = new Map<string, StoredAccount>(ACCOUNT_SEED.map((a) => [a.id, a]));
+const transactions = new Map<string, StoredTransaction>();
+const budgets = new Map<string, StoredBudget>();
+
+// accountId -> sum of signed transaction amounts (+income, -expense) for that account.
+const balanceIndex = new Map<string, number>();
 
 function categoryOf(categoryId: string): Category {
-  const category = categories.find((c) => c.id === categoryId);
+  const category = categories.get(categoryId);
   if (!category) throw new Error("Kategória sa nenašla.");
   return category;
 }
 function accountOf(accountId: string): StoredAccount {
-  const account = accounts.find((a) => a.id === accountId);
+  const account = accounts.get(accountId);
   if (!account) throw new Error("Účet sa nenašiel.");
   return account;
 }
 
-function accountBalanceDelta(accountId: string): number {
-  let delta = 0;
-  for (const t of transactions) {
-    if (t.accountId !== accountId) continue;
-    delta += t.type === "INCOME" ? Number(t.amount) : -Number(t.amount);
-  }
-  return delta;
+function signedAmount(t: StoredTransaction): number {
+  return t.type === "INCOME" ? Number(t.amount) : -Number(t.amount);
 }
+function adjustBalance(accountId: string, delta: number): void {
+  balanceIndex.set(accountId, (balanceIndex.get(accountId) ?? 0) + delta);
+}
+function addTransaction(stored: StoredTransaction): void {
+  transactions.set(stored.id, stored);
+  adjustBalance(stored.accountId, signedAmount(stored));
+}
+
 function toAccountDTO(account: StoredAccount): Account {
-  return { ...account, currentBalance: money(Number(account.initialBalance) + accountBalanceDelta(account.id)) };
+  return { ...account, currentBalance: money(Number(account.initialBalance) + (balanceIndex.get(account.id) ?? 0)) };
 }
 function hydrateTransaction(t: StoredTransaction): Transaction {
   return { ...t, account: toAccountDTO(accountOf(t.accountId)), category: categoryOf(t.categoryId) };
 }
 function withProgress(budget: StoredBudget): Budget {
   const { start, end } = monthRange(budget.year, budget.month);
-  const spent = transactions
-    .filter((t) => t.categoryId === budget.categoryId && t.type === "EXPENSE" && new Date(t.date) >= start && new Date(t.date) < end)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+  let spent = 0;
+  for (const t of transactions.values()) {
+    if (t.categoryId !== budget.categoryId || t.type !== "EXPENSE") continue;
+    const date = new Date(t.date);
+    if (date >= start && date < end) spent += Number(t.amount);
+  }
   const amount = Number(budget.amount);
   const percentage = amount === 0 ? 0 : Math.min(999, (spent / amount) * 100);
   return { ...budget, category: categoryOf(budget.categoryId), spent: money(spent), remaining: money(amount - spent), percentage };
@@ -147,7 +169,7 @@ function seedTransactions(): void {
     const add = (day: number, params: { accountId: string; categoryId: string; type: TransactionType; amount: number; note: string }) => {
       const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), day, 12);
       if (isCurrentMonth && date > today) return; // don't seed future transactions in the current month
-      transactions.push({
+      addTransaction({
         id: nextId("tx"),
         accountId: params.accountId,
         categoryId: params.categoryId,
@@ -212,12 +234,136 @@ function seedBudgets(): void {
   const today = new Date();
   const month = today.getMonth() + 1;
   const year = today.getFullYear();
-  budgets = [
+  const seed: StoredBudget[] = [
     { id: nextId("bud"), categoryId: "demo_cat_byvanie", amount: money(500), month, year },
     { id: nextId("bud"), categoryId: "demo_cat_jedlo", amount: money(250), month, year },
     { id: nextId("bud"), categoryId: "demo_cat_zabava", amount: money(80), month, year },
     { id: nextId("bud"), categoryId: "demo_cat_nakupy", amount: money(150), month, year },
   ];
+  for (const b of seed) budgets.set(b.id, b);
+}
+
+// ---- sample statement import ----
+
+/** Fictional statement rows "imported" in demo mode; `daysAgo` keeps them in the recent past. */
+const SAMPLE_STATEMENT: Array<{
+  daysAgo: number;
+  description: string;
+  amount: number;
+  fee?: number;
+  product?: "SAVINGS";
+  state?: "PENDING";
+}> = [
+  { daysAgo: 9, description: "Lidl", amount: -34.12 },
+  { daysAgo: 8, description: "Bolt", amount: -7.9 },
+  { daysAgo: 7, description: "Spotify", amount: -10.99 },
+  { daysAgo: 6, description: "Bankomat", amount: -60, fee: 1.99 },
+  { daysAgo: 5, description: "Vrátenie za lístky", amount: 25 },
+  { daysAgo: 4, description: "Kaufland", amount: -52.4 },
+  { daysAgo: 3, description: "Úroky", amount: 1.85, product: "SAVINGS" },
+  { daysAgo: 1, description: "Wolt", amount: -18.5, state: "PENDING" },
+];
+const SAMPLE_FILE_NAME = "ukazkovy-vypis-revolut.csv";
+/** Simulated background processing time, so the UI shows the same states as with the real queue. */
+const SAMPLE_PROCESSING_MS = 1500;
+const UNCATEGORIZED_IDS: Record<CategoryType, string> = {
+  EXPENSE: "demo_cat_nezaradene_v",
+  INCOME: "demo_cat_nezaradene_p",
+};
+
+const imports = new Map<string, { batch: StatementImport; readyAt: number }>();
+const rules = new Map<string, Omit<CategoryRule, "category">>();
+
+function matchableRules(): MatchableRule[] {
+  const result: MatchableRule[] = [];
+  for (const r of rules.values()) {
+    const category = categories.get(r.categoryId);
+    if (category) result.push({ pattern: r.pattern, categoryId: r.categoryId, categoryType: category.type });
+  }
+  return result;
+}
+
+/** Mirrors the server: only "Nezaradené" transactions move, manual choices are never overwritten. */
+function applyRulesToUncategorized(): number {
+  const active = matchableRules();
+  let moved = 0;
+  for (const t of transactions.values()) {
+    if (categories.get(t.categoryId)?.name !== UNCATEGORIZED_NAME) continue;
+    const categoryId = matchCategory(active, t.note, t.type);
+    if (categoryId) {
+      t.categoryId = categoryId;
+      moved += 1;
+    }
+  }
+  return moved;
+}
+
+function toRuleDTO(rule: Omit<CategoryRule, "category">): CategoryRule {
+  const { id, name, type, color } = categoryOf(rule.categoryId);
+  return { ...rule, category: { id, name, type, color } };
+}
+// accountId -> fingerprints already imported, so a repeated import reports duplicates like the real API.
+const importedFingerprints = new Map<string, Set<string>>();
+
+function ensureUncategorized(type: CategoryType): string {
+  const id = UNCATEGORIZED_IDS[type];
+  if (!categories.has(id)) {
+    categories.set(id, { id, name: UNCATEGORIZED_NAME, type, color: "#94a3b8", icon: "tag", createdAt: new Date().toISOString() });
+  }
+  return id;
+}
+
+/** Applies the sample rows to an account, mirroring the server's filtering, fee and de-duplication rules. */
+function processSampleImport(batch: StatementImport): void {
+  const account = accountOf(batch.accountId);
+  const accountProduct = account.type === "SAVINGS" ? "SAVINGS" : "CURRENT";
+  const seen = importedFingerprints.get(account.id) ?? new Set<string>();
+  importedFingerprints.set(account.id, seen);
+  const skipped: SkippedRow[] = [];
+  const activeRules = matchableRules();
+  let imported = 0;
+  let duplicates = 0;
+
+  const add = (fingerprint: string, signedAmount: number, note: string, date: Date) => {
+    if (seen.has(fingerprint)) {
+      duplicates += 1;
+      return;
+    }
+    seen.add(fingerprint);
+    imported += 1;
+    const type: TransactionType = signedAmount > 0 ? "INCOME" : "EXPENSE";
+    addTransaction({
+      id: nextId("tx"),
+      accountId: account.id,
+      categoryId: matchCategory(activeRules, note, type) ?? ensureUncategorized(type),
+      type,
+      amount: money(Math.abs(signedAmount)),
+      note,
+      date: date.toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+  };
+
+  SAMPLE_STATEMENT.forEach((row, index) => {
+    const rowNumber = index + 2;
+    if (row.state) return skipped.push({ row: rowNumber, reason: `stav ${row.state}` });
+    const rowProduct = row.product ?? "CURRENT";
+    if (rowProduct !== accountProduct) {
+      return skipped.push({ row: rowNumber, reason: `iný produkt (${rowProduct === "SAVINGS" ? "Vklad" : "Bežný"})` });
+    }
+    const today = new Date();
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - row.daysAgo, 12);
+    add(`sample_${index}`, row.amount, row.description, date);
+    if (row.fee) add(`sample_${index}_fee`, -row.fee, `Poplatok – ${row.description}`, date);
+  });
+
+  Object.assign(batch, {
+    status: "DONE",
+    imported,
+    duplicates,
+    skippedRows: skipped,
+    completedAt: new Date().toISOString(),
+  } satisfies Partial<StatementImport>);
 }
 
 seedTransactions();
@@ -227,7 +373,7 @@ seedBudgets();
 
 export const demoStore = {
   listAccounts(): Account[] {
-    return accounts.map(toAccountDTO);
+    return [...accounts.values()].map(toAccountDTO);
   },
   createAccount(input: AccountInput): Account {
     const account: StoredAccount = {
@@ -238,7 +384,7 @@ export const demoStore = {
       initialBalance: money(input.initialBalance),
       createdAt: new Date().toISOString(),
     };
-    accounts.push(account);
+    accounts.set(account.id, account);
     return toAccountDTO(account);
   },
   updateAccount(accountId: string, input: Partial<AccountInput>): Account {
@@ -251,18 +397,19 @@ export const demoStore = {
   },
   deleteAccount(accountId: string): void {
     accountOf(accountId);
-    if (transactions.some((t) => t.accountId === accountId)) {
-      throw new Error("Účet nie je možné vymazať, pretože obsahuje transakcie.");
+    for (const t of transactions.values()) {
+      if (t.accountId === accountId) throw new Error("Účet nie je možné vymazať, pretože obsahuje transakcie.");
     }
-    accounts = accounts.filter((a) => a.id !== accountId);
+    accounts.delete(accountId);
+    balanceIndex.delete(accountId);
   },
 
   listCategories(): Category[] {
-    return categories;
+    return [...categories.values()];
   },
   createCategory(input: CategoryInput): Category {
     const category: Category = { id: nextId("cat"), ...input, createdAt: new Date().toISOString() };
-    categories.push(category);
+    categories.set(category.id, category);
     return category;
   },
   updateCategory(categoryId: string, input: Partial<Omit<CategoryInput, "type">>): Category {
@@ -272,10 +419,12 @@ export const demoStore = {
   },
   deleteCategory(categoryId: string): void {
     categoryOf(categoryId);
-    if (transactions.some((t) => t.categoryId === categoryId)) {
-      throw new Error("Kategóriu nie je možné vymazať, pretože sa používa v transakciách.");
+    for (const t of transactions.values()) {
+      if (t.categoryId === categoryId) throw new Error("Kategóriu nie je možné vymazať, pretože sa používa v transakciách.");
     }
-    categories = categories.filter((c) => c.id !== categoryId);
+    categories.delete(categoryId);
+    // Same as the database cascade: a category's rules go with it.
+    for (const [ruleId, rule] of rules) if (rule.categoryId === categoryId) rules.delete(ruleId);
   },
 
   listTransactions(filters: TransactionFilters): TransactionsPage {
@@ -283,19 +432,20 @@ export const demoStore = {
     const pageSize = filters.pageSize ?? 20;
     const search = filters.search?.toLowerCase();
 
-    const filtered = transactions.filter((t) => {
-      if (filters.accountId && t.accountId !== filters.accountId) return false;
-      if (filters.categoryId && t.categoryId !== filters.categoryId) return false;
-      if (filters.type && t.type !== filters.type) return false;
-      if (search && !(t.note ?? "").toLowerCase().includes(search)) return false;
-      if (filters.dateFrom && new Date(t.date) < new Date(filters.dateFrom)) return false;
-      if (filters.dateTo && new Date(t.date) > new Date(filters.dateTo)) return false;
-      return true;
-    });
-    const sorted = [...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const total = sorted.length;
+    const filtered: StoredTransaction[] = [];
+    for (const t of transactions.values()) {
+      if (filters.accountId && t.accountId !== filters.accountId) continue;
+      if (filters.categoryId && t.categoryId !== filters.categoryId) continue;
+      if (filters.type && t.type !== filters.type) continue;
+      if (search && !(t.note ?? "").toLowerCase().includes(search)) continue;
+      if (filters.dateFrom && new Date(t.date) < new Date(filters.dateFrom)) continue;
+      if (filters.dateTo && new Date(t.date) > new Date(filters.dateTo)) continue;
+      filtered.push(t);
+    }
+    filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const total = filtered.length;
     const start = (page - 1) * pageSize;
-    const items = sorted.slice(start, start + pageSize).map(hydrateTransaction);
+    const items = filtered.slice(start, start + pageSize).map(hydrateTransaction);
 
     return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   },
@@ -315,11 +465,11 @@ export const demoStore = {
       date: new Date(input.date).toISOString(),
       createdAt: new Date().toISOString(),
     };
-    transactions.push(stored);
+    addTransaction(stored);
     return hydrateTransaction(stored);
   },
   updateTransaction(transactionId: string, input: Partial<TransactionInput>): Transaction {
-    const stored = transactions.find((t) => t.id === transactionId);
+    const stored = transactions.get(transactionId);
     if (!stored) throw new Error("Transakcia sa nenašla.");
 
     const accountId = input.accountId ?? stored.accountId;
@@ -331,38 +481,92 @@ export const demoStore = {
       throw new Error(`Kategória "${category.name}" nezodpovedá typu transakcie (${type}).`);
     }
 
+    // Reverse this transaction's old effect on its old account before mutating it,
+    // then re-apply the (possibly changed) effect to its (possibly changed) account.
+    adjustBalance(stored.accountId, -signedAmount(stored));
     stored.accountId = accountId;
     stored.categoryId = categoryId;
     stored.type = type;
     if (input.amount !== undefined) stored.amount = money(input.amount);
     if (input.note !== undefined) stored.note = input.note ?? null;
     if (input.date !== undefined) stored.date = new Date(input.date).toISOString();
+    adjustBalance(stored.accountId, signedAmount(stored));
+
     return hydrateTransaction(stored);
   },
   deleteTransaction(transactionId: string): void {
-    if (!transactions.some((t) => t.id === transactionId)) throw new Error("Transakcia sa nenašla.");
-    transactions = transactions.filter((t) => t.id !== transactionId);
+    const stored = transactions.get(transactionId);
+    if (!stored) throw new Error("Transakcia sa nenašla.");
+    transactions.delete(transactionId);
+    adjustBalance(stored.accountId, -signedAmount(stored));
   },
 
   listBudgets(month: number, year: number): Budget[] {
-    return budgets.filter((b) => b.month === month && b.year === year).map(withProgress);
+    return [...budgets.values()].filter((b) => b.month === month && b.year === year).map(withProgress);
   },
   createBudget(input: BudgetInput): Budget {
     const category = categoryOf(input.categoryId);
     if (category.type !== "EXPENSE") throw new Error("Rozpočet je možné nastaviť len pre výdavkové kategórie.");
     const budget: StoredBudget = { id: nextId("bud"), categoryId: input.categoryId, amount: money(input.amount), month: input.month, year: input.year };
-    budgets.push(budget);
+    budgets.set(budget.id, budget);
     return withProgress(budget);
   },
   updateBudget(budgetId: string, amount: number): Budget {
-    const budget = budgets.find((b) => b.id === budgetId);
+    const budget = budgets.get(budgetId);
     if (!budget) throw new Error("Rozpočet sa nenašiel.");
     budget.amount = money(amount);
     return withProgress(budget);
   },
   deleteBudget(budgetId: string): void {
-    if (!budgets.some((b) => b.id === budgetId)) throw new Error("Rozpočet sa nenašiel.");
-    budgets = budgets.filter((b) => b.id !== budgetId);
+    if (!budgets.has(budgetId)) throw new Error("Rozpočet sa nenašiel.");
+    budgets.delete(budgetId);
+  },
+
+  startSampleImport(accountId: string): StatementImport {
+    const account = accountOf(accountId);
+    if (!IMPORTABLE_ACCOUNT_TYPES.includes(account.type)) {
+      throw new Error("Výpis sa dá importovať len do bankového, kartového alebo sporiaceho účtu.");
+    }
+    const batch: StatementImport = {
+      id: nextId("imp"),
+      accountId,
+      fileName: SAMPLE_FILE_NAME,
+      status: "PROCESSING",
+      imported: 0,
+      duplicates: 0,
+      skippedRows: null,
+      error: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    };
+    imports.set(batch.id, { batch, readyAt: Date.now() + SAMPLE_PROCESSING_MS });
+    return { ...batch };
+  },
+  getImport(importId: string): StatementImport {
+    const stored = imports.get(importId);
+    if (!stored) throw new Error("Import sa nenašiel.");
+    if (stored.batch.status === "PROCESSING" && Date.now() >= stored.readyAt) processSampleImport(stored.batch);
+    return { ...stored.batch };
+  },
+
+  listCategoryRules(): CategoryRule[] {
+    return [...rules.values()].map(toRuleDTO).sort((a, b) => a.pattern.localeCompare(b.pattern));
+  },
+  createCategoryRule(input: CategoryRuleInput): CreatedCategoryRule {
+    const pattern = normalizeText(input.pattern);
+    if (pattern.length < 2) throw new Error("Vzor musí mať aspoň 2 znaky.");
+    if (pattern.length > 100) throw new Error("Vzor môže mať najviac 100 znakov.");
+    const category = categoryOf(input.categoryId);
+    if (category.name === UNCATEGORIZED_NAME) throw new Error("Pravidlo nemôže zaraďovať do „Nezaradené“.");
+
+    const existing = [...rules.values()].find((r) => r.pattern === pattern);
+    const rule = existing ?? { id: nextId("rule"), pattern, categoryId: category.id, createdAt: new Date().toISOString() };
+    rule.categoryId = category.id;
+    rules.set(rule.id, rule);
+    return { rule: toRuleDTO(rule), recategorized: applyRulesToUncategorized() };
+  },
+  deleteCategoryRule(ruleId: string): void {
+    if (!rules.delete(ruleId)) throw new Error("Pravidlo sa nenašlo.");
   },
 
   getDashboard(month: number, year: number): DashboardSummary {
@@ -370,13 +574,15 @@ export const demoStore = {
     const { start: monthStart, end: monthEnd } = monthRange(year, month);
     const trendStart = new Date(year, month - 1 - (TREND_MONTHS - 1), 1);
 
-    let totalBalance = accounts.reduce((sum, a) => sum + Number(a.initialBalance), 0);
-    for (const t of transactions) totalBalance += t.type === "INCOME" ? Number(t.amount) : -Number(t.amount);
+    let totalBalance = 0;
+    for (const account of accounts.values()) {
+      totalBalance += Number(account.initialBalance) + (balanceIndex.get(account.id) ?? 0);
+    }
 
     let monthlyIncome = 0;
     let monthlyExpense = 0;
     const spendingByCategory = new Map<string, { name: string; color: string; amount: number }>();
-    for (const t of transactions) {
+    for (const t of transactions.values()) {
       const date = new Date(t.date);
       if (date < monthStart || date >= monthEnd) continue;
       if (t.type === "INCOME") {
@@ -394,7 +600,7 @@ export const demoStore = {
       const d = new Date(year, month - 1 - i, 1);
       trendBuckets.set(monthKey(d.getFullYear(), d.getMonth() + 1), { income: 0, expense: 0 });
     }
-    for (const t of transactions) {
+    for (const t of transactions.values()) {
       const date = new Date(t.date);
       if (date < trendStart || date >= monthEnd) continue;
       const bucket = trendBuckets.get(monthKey(date.getFullYear(), date.getMonth() + 1));
@@ -410,7 +616,7 @@ export const demoStore = {
       monthlyIncome: money(monthlyIncome),
       monthlyExpense: money(monthlyExpense),
       monthlyNet: money(monthlyIncome - monthlyExpense),
-      accountsCount: accounts.length,
+      accountsCount: accounts.size,
       spendingByCategory: [...spendingByCategory.values()]
         .sort((a, b) => b.amount - a.amount)
         .map((c) => ({ name: c.name, color: c.color, amount: money(c.amount) })),

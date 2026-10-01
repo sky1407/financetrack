@@ -97,3 +97,39 @@ export interface DashboardSummary {
 export interface ApiErrorBody {
   error: string;
 }
+
+export type ImportStatus = "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+
+export interface SkippedRow {
+  row: number;
+  reason: string;
+}
+
+/** A bank statement upload and the outcome of its background processing. */
+export interface StatementImport {
+  id: string;
+  accountId: string;
+  fileName: string;
+  status: ImportStatus;
+  imported: number;
+  duplicates: number;
+  skippedRows: SkippedRow[] | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+/** Auto-categorization rule: notes containing `pattern` go to `category`. */
+export interface CategoryRule {
+  id: string;
+  pattern: string;
+  categoryId: string;
+  createdAt: string;
+  category: Pick<Category, "id" | "name" | "type" | "color">;
+}
+
+export interface CreatedCategoryRule {
+  rule: CategoryRule;
+  /** How many "Nezaradené" transactions the new rule moved. */
+  recategorized: number;
+}

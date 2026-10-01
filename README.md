@@ -1,6 +1,8 @@
 # FinanceTrack
 
-Full-stack personal finance tracker — accounts, categories, transactions, monthly budgets and a dashboard with charts. Built as a modern, fully typed full-stack project (React + Express + PostgreSQL) to demonstrate practical web application development skills.
+[![CI](https://github.com/sky1407/financetrack/actions/workflows/ci.yml/badge.svg)](https://github.com/sky1407/financetrack/actions/workflows/ci.yml)
+
+Full-stack personal finance tracker — accounts, categories, transactions, monthly budgets, a dashboard with charts, and **bank statement import** (Revolut CSV) processed by a background job queue with rule-based auto-categorization. Built as a modern, fully typed full-stack project (React + Express + PostgreSQL) to demonstrate practical web application development skills.
 
 **Live demo:** https://financetrack-lemon.vercel.app/login?demo=1 — opens straight into a populated dashboard, no registration or login required.
 
@@ -8,14 +10,36 @@ The public demo runs **entirely client-side** (seeded, in-memory data, no API ca
 
 ## Tech stack
 
-- **Backend:** Node.js + Express, TypeScript (`strict` mode), [Prisma ORM](https://www.prisma.io/) on top of **PostgreSQL**, JWT authentication (httpOnly cookie) + bcrypt password hashing, input validation via [Zod](https://zod.dev/), rate limiting on auth endpoints.
+- **Backend:** Node.js + Express, TypeScript (`strict` mode), [Prisma ORM](https://www.prisma.io/) on top of **PostgreSQL**, JWT authentication (httpOnly cookie) + bcrypt password hashing, input validation via [Zod](https://zod.dev/), rate limiting on auth and upload endpoints.
+- **Background jobs:** [BullMQ](https://docs.bullmq.io/) on **Redis** for statement imports (retries with exponential backoff, non-retryable failures for invalid files).
+- **Testing & CI:** [Vitest](https://vitest.dev/) unit tests; GitHub Actions runs typecheck, tests and production builds of both apps on every push and pull request.
 - **Frontend:** React + Vite + TypeScript, [Tailwind CSS](https://tailwindcss.com/), [TanStack Query](https://tanstack.com/query) for server-state management, `react-hook-form` + Zod for form validation, [Recharts](https://recharts.org/) for charts.
-- **Database:** PostgreSQL 16, spun up via Docker Compose — no manual DB install needed on your machine.
+- **Database & queue:** PostgreSQL 16 and Redis 7, spun up via Docker Compose — no manual install needed on your machine.
 - **Deployment:** frontend on Vercel. The Express/PostgreSQL backend is **not currently kept running** — the sections below document how to deploy it yourself (Fly.io + Neon), since the public demo link no longer needs it.
 
 ## Demo mode
 
-`client/src/lib/demoMode.ts` + `client/src/lib/demoStore.ts` implement a small in-memory "backend" that runs entirely in the browser: seeded accounts, categories, ~6 months of transactions and budgets, with the same business rules as the real API (account balances, budget progress, dashboard aggregation). `client/src/api/*.ts` transparently routes to it instead of the real backend whenever demo mode is active (`?demo=1`, or the "Vyskúšať demo" button), so every page, chart and CRUD action works without a server. Data resets on a full page reload — expected for a public, shared demo link.
+`client/src/lib/demoMode.ts` + `client/src/lib/demoStore.ts` implement a small in-memory "backend" that runs entirely in the browser: seeded accounts, categories, ~6 months of transactions and budgets, with the same business rules as the real API (account balances, budget progress, dashboard aggregation, category rules). On the import page the demo "imports" a bundled fictional statement, simulating processing time and applying the same filtering, fee, de-duplication and categorization rules as the server. `client/src/api/*.ts` transparently routes to it instead of the real backend whenever demo mode is active (`?demo=1`, or the "Vyskúšať demo" button), so every page, chart and CRUD action works without a server. Data resets on a full page reload — expected for a public, shared demo link.
+
+## Bank statement import
+
+```
+Browser ── POST /api/imports (text/csv, ≤ 2 MB) ──► ImportBatch row (PENDING, raw CSV)
+                                                       │ BullMQ job { batchId }   ← only the id goes to Redis
+                                                       ▼
+                                                 worker: parse → validate rows (Zod)
+                                                 → keep COMPLETED rows of the account's product & currency
+                                                 → categorize by user rules, else "Nezaradené"
+                                                 → createMany(skipDuplicates) on (accountId, fingerprint)
+                                                 → delete raw CSV, batch DONE { imported, duplicates, skippedRows }
+Browser ◄── GET /api/imports/:id (polled until DONE / FAILED)
+```
+
+- **Parser** (`server/src/modules/imports/revolut.parser.ts`) reads English and Slovak Revolut exports, works with integer cents (no float rounding), books fees as separate expenses and reports every ignored row with a reason instead of failing the whole file.
+- **Idempotent re-imports:** each row gets a language-independent SHA-256 fingerprint; a unique `(accountId, fingerprint)` index turns already imported rows into duplicates, so uploading the same statement twice changes nothing.
+- **Revolut sub-accounts:** bank/card accounts import the main ("Current") rows, savings accounts the "Savings" rows — transfers between them are never double counted.
+- **Auto-categorization:** rules "note contains *pattern* → category" (longest pattern wins, category type must match the transaction type, so a merchant refund never lands in an expense category). Editing a transaction offers *"remember for similar transactions"*; a new rule recategorizes only "Nezaradené" transactions, never manual choices.
+- **Privacy:** the uploaded file is deleted after processing, only the user's own transactions are stored. Tests use fictional data only — try the feature with [`docs/sample-revolut-statement.csv`](docs/sample-revolut-statement.csv).
 
 ## Why this stack
 
@@ -24,8 +48,10 @@ The project deliberately uses a **real relational database (PostgreSQL) with an 
 ## Project structure
 
 ```
-Newapp/
-  docker-compose.yml     PostgreSQL container (local dev only)
+financetrack/
+  .github/workflows/      CI (typecheck, tests, builds)
+  docker-compose.yml     PostgreSQL + Redis containers (local dev only)
+  docs/                   fictional sample statement for trying the import
   server/                 Express REST API
     Dockerfile              Fly.io build image
     fly.toml                Fly.io app + release_command (prisma migrate deploy)
@@ -33,19 +59,20 @@ Newapp/
     src/
       config/               env validation, Prisma client
       middleware/            auth (JWT), error handler, zod validation
-      modules/                auth, accounts, categories, transactions, budgets, dashboard
+      modules/                auth, accounts, categories, categoryRules, transactions, budgets, dashboard, imports
         <module>/<module>.schema.ts     Zod validation schemas
         <module>/<module>.service.ts    business logic + Prisma queries
         <module>/<module>.controller.ts HTTP layer
         <module>/<module>.routes.ts     Express router
       utils/                 AppError, catchAsync, JWT helpers
+    tests/                  Vitest unit tests (parser, rule matcher)
   client/                  React + Vite frontend
     vercel.json              Vercel deploy config (SPA rewrites)
     src/
       api/                   typed HTTP calls to the backend (axios)
       components/            ui/ (Button, Input, Modal, ...), layout/, charts/, + per-domain folders (accounts/, categories/, ...)
       context/, hooks/        AuthContext, useAuth, useAccounts, useTransactions, ...
-      pages/                  DashboardPage, TransactionsPage, AccountsPage, CategoriesPage, BudgetsPage
+      pages/                  DashboardPage, TransactionsPage, AccountsPage, CategoriesPage, BudgetsPage, ImportPage
       routes/                 ProtectedRoute
 ```
 
@@ -59,18 +86,21 @@ Every domain module (accounts, categories, transactions, budgets, dashboard) fol
 - Transactions with filters (type, account, category, date range, note search) and pagination
 - Monthly budgets per expense category with a visual spending progress bar
 - Dashboard: total balance, monthly income/expense, a pie chart of spending by category, a bar chart of income vs. expense over the last 6 months
+- Bank statement import (Revolut CSV) with live progress, a summary of imported / duplicate / skipped rows, and safe re-imports
+- Auto-categorization rules, learned from your own edits
+- Responsive layout with a mobile navigation drawer
 
 ## Running locally
 
-Requires Node.js 18+ and Docker (Docker Desktop on Windows/Mac, or Docker Engine on Linux).
+Requires Node.js 22.12+ and Docker (Docker Desktop on Windows/Mac, or Docker Engine on Linux).
 
-### 1. Database (PostgreSQL via Docker)
+### 1. Database and Redis (via Docker)
 
 ```bash
 docker compose up -d
 ```
 
-This starts Postgres on `localhost:5432` (credentials in `docker-compose.yml`: `financetrack` / `financetrack`).
+This starts Postgres on `localhost:5432` (credentials in `docker-compose.yml`: `financetrack` / `financetrack`) and Redis on `localhost:6379` for the import queue.
 
 ### 2. Backend
 
@@ -80,8 +110,11 @@ npm install
 cp .env.example .env        # defaults already match docker-compose.yml
 npm run prisma:migrate      # creates the database tables
 npm run seed                # seeds a demo account, categories and transactions
-npm run dev                 # API runs on http://localhost:4000
+npm run dev                 # API + import worker on http://localhost:4000
+npm test                    # unit tests
 ```
+
+Without `REDIS_URL` the API still runs normally; only statement imports respond with 503.
 
 Demo login after seeding: **email** `demo@financetrack.app`, **password** `demo1234`.
 
@@ -138,6 +171,8 @@ fly secrets set \
 fly deploy
 ```
 
+To enable statement imports in production, also set `REDIS_URL` (e.g. a free [Upstash](https://upstash.com/) Redis database; BullMQ needs the `noeviction` policy). The worker runs inside the API process.
+
 `release_command` in `fly.toml` runs `prisma migrate deploy` automatically before each deploy, so the schema stays in sync. Check health: `curl https://<your-app>.fly.dev/api/health`.
 
 ### 3. Frontend — Vercel
@@ -150,7 +185,8 @@ In the Vercel project settings, set the environment variable `VITE_API_URL` to `
 - JWT in an `httpOnly` cookie (`sameSite=lax` in dev, `sameSite=none; secure` in production for cross-origin frontend/backend) — not readable from JS, limited CSRF surface
 - All input validated with Zod at the API boundary, not just on the frontend
 - Every data query (accounts, categories, transactions, budgets) is scoped to the logged-in user's `userId` — you can't reach someone else's data just by guessing an ID
-- Rate limiting on `/api/auth/*` against password brute-forcing
+- Rate limiting on `/api/auth/*` against password brute-forcing and on statement uploads
+- Statement uploads: authentication is checked before the body is buffered, 2 MB limit (413), only CSV accepted; the raw file is deleted after processing and the job queue carries only an id, never statement data
 - Foreign keys and database constraints (e.g. a category used in a transaction can't be deleted) protect data integrity even if application-level validation is bypassed
 
 ## Possible extensions (going further)

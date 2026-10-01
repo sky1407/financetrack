@@ -23,13 +23,13 @@ export function TransactionTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-4 py-3">Dátum</th>
             <th className="px-4 py-3">Kategória</th>
-            <th className="px-4 py-3">Účet</th>
+            <th className="hidden px-4 py-3 sm:table-cell">Účet</th>
             <th className="px-4 py-3">Poznámka</th>
             <th className="px-4 py-3 text-right">Suma</th>
             <th className="px-4 py-3" />
@@ -53,8 +53,8 @@ export function TransactionTable({
                     {transaction.category.name}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{transaction.account.name}</td>
-                <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">{transaction.note || "—"}</td>
+                <td className="hidden px-4 py-3 text-slate-600 sm:table-cell">{transaction.account.name}</td>
+                <td className="min-w-[140px] max-w-[220px] truncate px-4 py-3 text-slate-500">{transaction.note || "—"}</td>
                 <td className={`whitespace-nowrap px-4 py-3 text-right font-medium ${isIncome ? "text-green-700" : "text-red-700"}`}>
                   {isIncome ? "+" : "-"}
                   {formatCurrency(transaction.amount)}
