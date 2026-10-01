@@ -12,6 +12,7 @@ import { transactionsRouter } from "./modules/transactions/transactions.routes.j
 import { budgetsRouter } from "./modules/budgets/budgets.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { importsRouter } from "./modules/imports/imports.routes.js";
+import { categoryRulesRouter } from "./modules/categoryRules/categoryRules.routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -41,6 +42,7 @@ export function createApp(): Express {
   app.use("/api/budgets", budgetsRouter);
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/imports", importsRouter);
+  app.use("/api/category-rules", categoryRulesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

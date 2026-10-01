@@ -1,6 +1,9 @@
 import { UnrecoverableError, type Job } from "bullmq";
 import { AccountType, CategoryType, ImportStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../config/db.js";
+import { UNCATEGORIZED } from "../categories/categories.constants.js";
+import { matchCategory } from "../categoryRules/categoryRules.matcher.js";
+import { loadMatchableRules } from "../categoryRules/categoryRules.service.js";
 import { AppError } from "../../utils/AppError.js";
 import { enqueueImport, isImportQueueEnabled, type ImportJobData } from "./imports.queue.js";
 import { parseRevolutStatement, type StatementProduct } from "./revolut.parser.js";
@@ -11,8 +14,6 @@ const PRODUCT_BY_ACCOUNT_TYPE: Partial<Record<AccountType, StatementProduct>> = 
   [AccountType.CARD]: "CURRENT",
   [AccountType.SAVINGS]: "SAVINGS",
 };
-
-const UNCATEGORIZED = { name: "Nezaradené", color: "#94a3b8", icon: "tag" } as const;
 
 /** Batch fields safe to return to the client (never the raw statement). */
 const batchSelect = {
@@ -62,7 +63,8 @@ export async function getImport(userId: string, batchId: string) {
 }
 
 /**
- * BullMQ processor: parses the stored statement and inserts its transactions.
+ * BullMQ processor: parses the stored statement and inserts its transactions, categorized by the
+ * user's rules or filed under "Nezaradené".
  * Invalid files fail immediately without retries; unexpected errors are retried and the batch
  * is marked FAILED only after the last attempt. The raw statement is deleted in both outcomes.
  */
@@ -96,6 +98,7 @@ async function processBatch(batchId: string): Promise<void> {
     currency: batch.account.currency,
     product,
   });
+  const rules = await loadMatchableRules(batch.userId);
 
   await prisma.$transaction(async (tx) => {
     const categoryIds = await ensureUncategorized(tx, batch.userId);
@@ -103,7 +106,7 @@ async function processBatch(batchId: string): Promise<void> {
       data: transactions.map((t) => ({
         userId: batch.userId,
         accountId: batch.accountId,
-        categoryId: categoryIds[t.type],
+        categoryId: matchCategory(rules, t.description, t.type) ?? categoryIds[t.type],
         importBatchId: batch.id,
         type: t.type,
         amount: t.amount,
