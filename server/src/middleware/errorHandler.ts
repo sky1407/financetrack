@@ -20,6 +20,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
+  if (isPayloadTooLarge(err)) {
+    res.status(413).json({ error: "Požiadavka je príliš veľká." });
+    return;
+  }
+
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
       res.status(409).json({ error: "Záznam s týmito údajmi už existuje." });
@@ -40,4 +45,9 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     error: "Nastala neočakávaná chyba na serveri.",
     ...(isProduction ? {} : { detail: err instanceof Error ? err.message : String(err) }),
   });
+}
+
+/** Body parsers reject oversized bodies with this error type; it is a client error, not a server bug. */
+function isPayloadTooLarge(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { type?: unknown }).type === "entity.too.large";
 }
