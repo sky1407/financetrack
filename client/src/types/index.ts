@@ -118,3 +118,18 @@ export interface StatementImport {
   createdAt: string;
   completedAt: string | null;
 }
+
+/** Auto-categorization rule: notes containing `pattern` go to `category`. */
+export interface CategoryRule {
+  id: string;
+  pattern: string;
+  categoryId: string;
+  createdAt: string;
+  category: Pick<Category, "id" | "name" | "type" | "color">;
+}
+
+export interface CreatedCategoryRule {
+  rule: CategoryRule;
+  /** How many "Nezaradené" transactions the new rule moved. */
+  recategorized: number;
+}

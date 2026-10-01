@@ -2,7 +2,9 @@ import type {
   Account,
   Budget,
   Category,
+  CategoryRule,
   CategoryType,
+  CreatedCategoryRule,
   DashboardSummary,
   SkippedRow,
   StatementImport,
@@ -14,7 +16,9 @@ import type { AccountInput } from "@/api/accounts";
 import type { CategoryInput } from "@/api/categories";
 import type { TransactionFilters, TransactionInput } from "@/api/transactions";
 import type { BudgetInput } from "@/api/budgets";
+import type { CategoryRuleInput } from "@/api/categoryRules";
 import { IMPORTABLE_ACCOUNT_TYPES } from "@/lib/constants";
+import { matchCategory, normalizeText, UNCATEGORIZED_NAME, type MatchableRule } from "@/lib/categoryRules";
 
 /**
  * In-memory backend stand-in for demo mode. Mirrors the real API's shapes
@@ -268,13 +272,43 @@ const UNCATEGORIZED_IDS: Record<CategoryType, string> = {
 };
 
 const imports = new Map<string, { batch: StatementImport; readyAt: number }>();
+const rules = new Map<string, Omit<CategoryRule, "category">>();
+
+function matchableRules(): MatchableRule[] {
+  const result: MatchableRule[] = [];
+  for (const r of rules.values()) {
+    const category = categories.get(r.categoryId);
+    if (category) result.push({ pattern: r.pattern, categoryId: r.categoryId, categoryType: category.type });
+  }
+  return result;
+}
+
+/** Mirrors the server: only "Nezaradené" transactions move, manual choices are never overwritten. */
+function applyRulesToUncategorized(): number {
+  const active = matchableRules();
+  let moved = 0;
+  for (const t of transactions.values()) {
+    if (categories.get(t.categoryId)?.name !== UNCATEGORIZED_NAME) continue;
+    const categoryId = matchCategory(active, t.note, t.type);
+    if (categoryId) {
+      t.categoryId = categoryId;
+      moved += 1;
+    }
+  }
+  return moved;
+}
+
+function toRuleDTO(rule: Omit<CategoryRule, "category">): CategoryRule {
+  const { id, name, type, color } = categoryOf(rule.categoryId);
+  return { ...rule, category: { id, name, type, color } };
+}
 // accountId -> fingerprints already imported, so a repeated import reports duplicates like the real API.
 const importedFingerprints = new Map<string, Set<string>>();
 
 function ensureUncategorized(type: CategoryType): string {
   const id = UNCATEGORIZED_IDS[type];
   if (!categories.has(id)) {
-    categories.set(id, { id, name: "Nezaradené", type, color: "#94a3b8", icon: "tag", createdAt: new Date().toISOString() });
+    categories.set(id, { id, name: UNCATEGORIZED_NAME, type, color: "#94a3b8", icon: "tag", createdAt: new Date().toISOString() });
   }
   return id;
 }
@@ -286,6 +320,7 @@ function processSampleImport(batch: StatementImport): void {
   const seen = importedFingerprints.get(account.id) ?? new Set<string>();
   importedFingerprints.set(account.id, seen);
   const skipped: SkippedRow[] = [];
+  const activeRules = matchableRules();
   let imported = 0;
   let duplicates = 0;
 
@@ -300,7 +335,7 @@ function processSampleImport(batch: StatementImport): void {
     addTransaction({
       id: nextId("tx"),
       accountId: account.id,
-      categoryId: ensureUncategorized(type),
+      categoryId: matchCategory(activeRules, note, type) ?? ensureUncategorized(type),
       type,
       amount: money(Math.abs(signedAmount)),
       note,
@@ -388,6 +423,8 @@ export const demoStore = {
       if (t.categoryId === categoryId) throw new Error("Kategóriu nie je možné vymazať, pretože sa používa v transakciách.");
     }
     categories.delete(categoryId);
+    // Same as the database cascade: a category's rules go with it.
+    for (const [ruleId, rule] of rules) if (rule.categoryId === categoryId) rules.delete(ruleId);
   },
 
   listTransactions(filters: TransactionFilters): TransactionsPage {
@@ -510,6 +547,26 @@ export const demoStore = {
     if (!stored) throw new Error("Import sa nenašiel.");
     if (stored.batch.status === "PROCESSING" && Date.now() >= stored.readyAt) processSampleImport(stored.batch);
     return { ...stored.batch };
+  },
+
+  listCategoryRules(): CategoryRule[] {
+    return [...rules.values()].map(toRuleDTO).sort((a, b) => a.pattern.localeCompare(b.pattern));
+  },
+  createCategoryRule(input: CategoryRuleInput): CreatedCategoryRule {
+    const pattern = normalizeText(input.pattern);
+    if (pattern.length < 2) throw new Error("Vzor musí mať aspoň 2 znaky.");
+    if (pattern.length > 100) throw new Error("Vzor môže mať najviac 100 znakov.");
+    const category = categoryOf(input.categoryId);
+    if (category.name === UNCATEGORIZED_NAME) throw new Error("Pravidlo nemôže zaraďovať do „Nezaradené“.");
+
+    const existing = [...rules.values()].find((r) => r.pattern === pattern);
+    const rule = existing ?? { id: nextId("rule"), pattern, categoryId: category.id, createdAt: new Date().toISOString() };
+    rule.categoryId = category.id;
+    rules.set(rule.id, rule);
+    return { rule: toRuleDTO(rule), recategorized: applyRulesToUncategorized() };
+  },
+  deleteCategoryRule(ruleId: string): void {
+    if (!rules.delete(ruleId)) throw new Error("Pravidlo sa nenašlo.");
   },
 
   getDashboard(month: number, year: number): DashboardSummary {
