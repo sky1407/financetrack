@@ -61,12 +61,12 @@ export function TransactionTable({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" className="!px-2" onClick={() => onEdit(transaction)} aria-label="Upraviť transakciu">
+                    <Button variant="ghost" className="px-2!" onClick={() => onEdit(transaction)} aria-label="Upraviť transakciu">
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
-                      className="!px-2 text-red-600 hover:bg-red-50"
+                      className="px-2! text-red-600 hover:bg-red-50"
                       onClick={() => onDelete(transaction)}
                       aria-label="Zmazať transakciu"
                     >

@@ -45,12 +45,12 @@ function CategoryGroup({
                   <span className="text-sm text-slate-800">{category.name}</span>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" className="!px-2" onClick={() => onEdit(category)} aria-label="Upraviť kategóriu">
+                  <Button variant="ghost" className="px-2!" onClick={() => onEdit(category)} aria-label="Upraviť kategóriu">
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
-                    className="!px-2 text-red-600 hover:bg-red-50"
+                    className="px-2! text-red-600 hover:bg-red-50"
                     onClick={() => onDelete(category)}
                     aria-label="Zmazať kategóriu"
                   >

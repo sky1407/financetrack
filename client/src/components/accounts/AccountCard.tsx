@@ -31,10 +31,10 @@ export function AccountCard({ account, onEdit, onDelete }: { account: Account; o
           </div>
         </div>
         <div className="flex gap-1">
-          <Button variant="ghost" className="!px-2" onClick={onEdit} aria-label="Upraviť účet">
+          <Button variant="ghost" className="px-2!" onClick={onEdit} aria-label="Upraviť účet">
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" className="!px-2 text-red-600 hover:bg-red-50" onClick={onDelete} aria-label="Zmazať účet">
+          <Button variant="ghost" className="px-2! text-red-600 hover:bg-red-50" onClick={onDelete} aria-label="Zmazať účet">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>

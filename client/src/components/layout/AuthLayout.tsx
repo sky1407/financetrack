@@ -13,7 +13,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
           <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500">{subtitle}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">{children}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">{children}</div>
       </div>
     </div>
   );

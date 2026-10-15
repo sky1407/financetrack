@@ -23,10 +23,10 @@ export function BudgetCard({ budget, onEdit, onDelete }: { budget: Budget; onEdi
           <p className="font-medium text-slate-900">{budget.category.name}</p>
         </div>
         <div className="flex gap-1">
-          <Button variant="ghost" className="!px-2" onClick={onEdit} aria-label="Upraviť rozpočet">
+          <Button variant="ghost" className="px-2!" onClick={onEdit} aria-label="Upraviť rozpočet">
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" className="!px-2 text-red-600 hover:bg-red-50" onClick={onDelete} aria-label="Zmazať rozpočet">
+          <Button variant="ghost" className="px-2! text-red-600 hover:bg-red-50" onClick={onDelete} aria-label="Zmazať rozpočet">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
