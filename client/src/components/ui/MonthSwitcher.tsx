@@ -24,7 +24,7 @@ export function MonthSwitcher({
       <Button variant="secondary" onClick={() => shift(-1)} aria-label="Predchádzajúci mesiac">
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <span className="min-w-[9rem] text-center text-sm font-medium capitalize text-slate-700">{label}</span>
+      <span className="min-w-36 text-center text-sm font-medium capitalize text-slate-700">{label}</span>
       <Button variant="secondary" onClick={() => shift(1)} aria-label="Nasledujúci mesiac">
         <ChevronRight className="h-4 w-4" />
       </Button>
