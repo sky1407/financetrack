@@ -10,7 +10,7 @@ const accountFormSchema = z.object({
   name: z.string().min(1, "Zadaj názov účtu."),
   type: z.enum(["CASH", "BANK", "CARD", "SAVINGS", "OTHER"]),
   currency: z.string().length(3, "Mena musí mať 3 znaky, napr. EUR."),
-  initialBalance: z.coerce.number({ invalid_type_error: "Zadaj číslo." }).finite(),
+  initialBalance: z.coerce.number({ error: "Zadaj číslo." }).finite(),
 });
 
 export type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -30,7 +30,7 @@ export function AccountForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<AccountFormValues>({
+  } = useForm<z.input<typeof accountFormSchema>, unknown, AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
     defaultValues: { type: "BANK", currency: "EUR", initialBalance: 0, ...defaultValues },
   });

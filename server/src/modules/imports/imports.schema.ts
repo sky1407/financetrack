@@ -8,7 +8,7 @@ export const createImportQuerySchema = z.object({
 });
 
 export const statementContentSchema = z
-  .string({ invalid_type_error: "Pošli výpis ako CSV (Content-Type: text/csv)." })
+  .string({ error: "Pošli výpis ako CSV (Content-Type: text/csv)." })
   .refine((content) => content.trim().length > 0, "Súbor je prázdny.");
 
 export type CreateImportQuery = z.infer<typeof createImportQuerySchema>;

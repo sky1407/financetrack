@@ -13,7 +13,7 @@ const transactionFormSchema = z
     type: z.enum(["INCOME", "EXPENSE"]),
     accountId: z.string().min(1, "Zvoľ účet."),
     categoryId: z.string().min(1, "Zvoľ kategóriu."),
-    amount: z.coerce.number({ invalid_type_error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
+    amount: z.coerce.number({ error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
     date: z.string().min(1, "Zvoľ dátum."),
     note: z.string().max(200).optional(),
     /** When set, the page also saves a categorization rule "note contains rulePattern → categoryId". */
@@ -51,7 +51,7 @@ export function TransactionForm({
     setValue,
     handleSubmit,
     formState: { errors },
-  } = useForm<TransactionFormValues>({
+  } = useForm<z.input<typeof transactionFormSchema>, unknown, TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: "EXPENSE",
