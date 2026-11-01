@@ -8,7 +8,7 @@ import type { Category } from "@/types";
 
 const budgetFormSchema = z.object({
   categoryId: z.string().min(1, "Zvoľ kategóriu."),
-  amount: z.coerce.number({ invalid_type_error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
+  amount: z.coerce.number({ error: "Zadaj sumu." }).positive("Suma musí byť kladné číslo."),
 });
 
 export type BudgetFormValues = z.infer<typeof budgetFormSchema>;
@@ -32,7 +32,7 @@ export function BudgetForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<BudgetFormValues>({
+  } = useForm<z.input<typeof budgetFormSchema>, unknown, BudgetFormValues>({
     resolver: zodResolver(budgetFormSchema),
     defaultValues: { categoryId: availableCategories[0]?.id ?? "", amount: 100, ...defaultValues },
   });
